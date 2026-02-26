@@ -18,10 +18,12 @@ class Agent:
         self.state = state  # Susceptible, Infected or Recovered
         self.time_infected = 0 # Timeframe used to determine if current agent has had ample time to recover from infection (MAY CHANGE)
 
+
+
     #Move rules defined for the agent with tweakable stepping size
-    def move(self, width, height, step_size=1):
+    def move(self, width, height, step_size=2):
             
-            #Set a range between -1 and 1 that the agent can move.  Makes for unpredictable movement
+            #Set a range that the agent can move between -2 and 2.  Makes for unpredictable movement.  Can be any number between -2 and 2
             dx = random.uniform(-step_size, step_size)
             dy = random.uniform(-step_size, step_size)
 
@@ -30,13 +32,18 @@ class Agent:
             self.y = max(0, min(height, self.y + dy))
 
         
+        
+        
     #Using the Euclidean Distance Formula to calculate the current distance from current agent to another agent
     def distance(self, other_agent):
         return math.sqrt((self.x - other_agent.x) ** 2 + (self.y - other_agent.y) ** 2)
 
     
+    
+    
     #Simple implementation of getting "infected" by checking the current state of the agent and verifying it is "Susceptible" before infecting
     def infect(self):
+        
         
         
         #Sets the state to infected if current state is susceptible and sets the time to 0

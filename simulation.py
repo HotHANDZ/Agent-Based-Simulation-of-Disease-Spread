@@ -1,15 +1,15 @@
 import random
 from agent import Agent
-from disease import DiseaseModel
-
-
 
 class Simulation:
     
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
-    def __init__(self, num_agents=100, width=100, height=100):
+    def __init__(self, num_agents, width, height, disease):
         
-        #Set the boundary of the simulation to 100 x 100
+        #Set the number of agents equal to input value
+        self.num_agents = num_agents
+        
+        #Set the boundary of the simulatio
         self.width = width
         self.height = height
         
@@ -17,7 +17,7 @@ class Simulation:
         self.agents = []
         
         #Use the DiseaseModel class [Inside disease.py] for reference on infection
-        self.disease = DiseaseModel()
+        self.disease = disease
         
         #Set initial time at 0 - used as reference for agents to recover and for data gethering
         self.time = 0
@@ -67,7 +67,7 @@ class Simulation:
                     if other.state == "Susceptible":
                         
                         #If the agent is susceptible, verify the distance between the infected and susceptible agent is less than 2
-                        if agent.distance(other) < 2:
+                        if agent.distance(other) < 3:
                             
                             #Reference the probability of infection against random number rolled.  If the random number is less than the probability, infect the agent
                             if random.random() < self.disease.transmission_probability:
@@ -98,8 +98,10 @@ class Simulation:
 
 
 
-    #Define a function for number of agents of each type
+    #Define a function for number of agents of each type 
     def record_data(self):
+        
+        #Get the sum of every agent of type Susceptible, Infected and Recovered
         s = sum(1 for a in self.agents if a.state == "Susceptible")
         i = sum(1 for a in self.agents if a.state == "Infected")
         r = sum(1 for a in self.agents if a.state == "Recovered")
@@ -108,3 +110,32 @@ class Simulation:
         self.susceptible_counts.append(s)
         self.infected_counts.append(i)
         self.recovered_counts.append(r)
+        
+    #Itterate through "time" as per the number defined by "time steps" in Main
+    def run(self, steps):
+        for t in range(steps):
+            self.step()
+            
+            
+            #DEBUG PRINT
+            #print(f"Step {t}: Susceptible={self.susceptible_counts[-1]} Infected={self.infected_counts[-1]} Recovered={self.recovered_counts[-1]}")
+
+    #Plot points on 2D chart
+    def plot(self):
+        
+        #Used for graphical representation
+        import matplotlib.pyplot as plt
+        
+        #Plot number of each respective type of agent
+        plt.plot(self.susceptible_counts, label="Susceptible")
+        plt.plot(self.infected_counts, label="Infected")
+        plt.plot(self.recovered_counts, label="Recovered")
+        
+        #Define x axis as time
+        plt.xlabel("Time Steps")
+        
+        #Define y axis as number of agents
+        plt.ylabel("Number of Agents")
+        
+        plt.legend()
+        plt.show()
