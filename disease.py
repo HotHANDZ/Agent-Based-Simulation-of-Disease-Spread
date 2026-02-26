@@ -1,5 +1,3 @@
-
-
 class DiseaseModel:
     
     #Constructor with ability to tweak odds of transmitting infection and defining a tiem for infection recovery
