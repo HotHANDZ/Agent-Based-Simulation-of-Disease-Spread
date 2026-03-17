@@ -13,23 +13,72 @@ class Agent:
         #Position tracking on an X Y coordinate
         self.x = x
         self.y = y
+
+        #Remember the agent's "home" location (spawn point on the border)
+        self.home_x = x
+        self.home_y = y
         
         #Tracking of current agent state
         self.state = state  # Susceptible, Infected or Recovered
         self.time_infected = 0 # Timeframe used to determine if current agent has had ample time to recover from infection (MAY CHANGE)
 
+        #Movement phase: agents start at home, then go to the center and finally return home
+        #Valid phases: "to_center", "to_home", "at_home"
+        self.phase = "to_center"
+
 
 
     #Move rules defined for the agent with tweakable stepping size
     def move(self, width, height, step_size=2):
-            
-            #Set a range that the agent can move between -2 and 2.  Makes for unpredictable movement.  Can be any number between -2 and 2
-            dx = random.uniform(-step_size, step_size)
-            dy = random.uniform(-step_size, step_size)
 
-            #Add the previously attained value for the random movement of the x and y coordinates and add them to existing x and y coordinate
+            #If the agent has already returned home, keep it at home
+            if self.phase == "at_home":
+                return
+
+            #Determine the current movement target
+            center_x = width / 2
+            center_y = height / 2
+
+            if self.phase == "to_center":
+                target_x, target_y = center_x, center_y
+            elif self.phase == "to_home":
+                target_x, target_y = self.home_x, self.home_y
+            else:
+                target_x, target_y = self.x, self.y
+
+            #Vector toward the target
+            vx = target_x - self.x
+            vy = target_y - self.y
+
+            distance_to_target = math.hypot(vx, vy)
+
+            if distance_to_target > 0:
+                #Normalize the vector and move up to step_size toward the target
+                scale = min(step_size, distance_to_target) / distance_to_target
+                dx = vx * scale
+                dy = vy * scale
+            else:
+                dx = 0
+                dy = 0
+
+            #Update position, clamped to the simulation bounds
             self.x = max(0, min(width, self.x + dx))
             self.y = max(0, min(height, self.y + dy))
+
+            #Update phase transitions based on proximity to targets
+            #Thresholds can be tuned; they are in simulation units
+            center_threshold = max(width, height) * 0.05  # within 5% of the largest dimension counts as "at center"
+            home_threshold = step_size  # close enough to home
+
+            #Check if we have reached the center and should start going home
+            if self.phase == "to_center":
+                if math.hypot(self.x - center_x, self.y - center_y) <= center_threshold:
+                    self.phase = "to_home"
+
+            #Check if we have returned home and should stay there
+            if self.phase == "to_home":
+                if math.hypot(self.x - self.home_x, self.y - self.home_y) <= home_threshold:
+                    self.phase = "at_home"
 
         
         

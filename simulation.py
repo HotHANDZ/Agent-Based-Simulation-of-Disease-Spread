@@ -9,7 +9,7 @@ class Simulation:
         #Set the number of agents equal to input value
         self.num_agents = num_agents
         
-        #Set the boundary of the simulatio
+        #Set the boundary of the simulation
         self.width = width
         self.height = height
         
@@ -23,14 +23,30 @@ class Simulation:
         self.time = 0
 
 
-        # Initialize agents spawn points randomly for every agent.  (Itterate N number of times based on agent amount)
+        # Initialize agents spawn points on the border so that each agent
+        # "lives" at its own house on the edge of the simulation area.
+        # (Iterate N number of times based on agent amount)
         for _ in range(num_agents):
-            
-            #Set a random value between the border values for x and y
-            x = random.uniform(0, width)
-            y = random.uniform(0, height)
-            
-            #Initialize a new agent at specified X and Y value gathered from above
+
+            #Choose a random side of the border: left, right, top, or bottom
+            side = random.choice(["left", "right", "top", "bottom"])
+
+            if side == "left":
+                x = 0
+                y = random.uniform(0, height)
+            elif side == "right":
+                x = width
+                y = random.uniform(0, height)
+            elif side == "top":
+                x = random.uniform(0, width)
+                y = 0
+            else:  # "bottom"
+                x = random.uniform(0, width)
+                y = height
+
+            #Initialize a new agent at specified X and Y value gathered from above.
+            #Each agent will remember this as its "home" location and will start
+            #by moving toward the center of the area before returning home.
             self.agents.append(Agent(x, y))
 
 
@@ -117,7 +133,7 @@ class Simulation:
             self.step()
             
             
-            #DEBUG PRINT
+            #DEBUG PRINT EVERY TIME STAMP - Uncomment this to see status at every time step
             #print(f"Step {t}: Susceptible={self.susceptible_counts[-1]} Infected={self.infected_counts[-1]} Recovered={self.recovered_counts[-1]}")
 
     #Plot points on 2D chart
