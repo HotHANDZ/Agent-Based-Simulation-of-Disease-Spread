@@ -8,7 +8,7 @@ class Agent:
     
     
     #Constructor for agent
-    def __init__(self, x, y, state="Susceptible"):
+    def __init__(self, x, y, state="Susceptible", vaccinated=False):
         
         #Position tracking on an X Y coordinate
         self.x = x
@@ -21,6 +21,9 @@ class Agent:
         #Tracking of current agent state
         self.state = state  # Susceptible, Infected or Recovered
         self.time_infected = 0 # Timeframe used to determine if current agent has had ample time to recover from infection (MAY CHANGE)
+
+        #Vaccination status (affects infection probability when this agent is susceptible)
+        self.vaccinated = vaccinated
 
         #Each agent travels: home -> random destination -> home (repeats)
         #Valid phases: "to_target", "to_home", "at_home"
@@ -38,7 +41,7 @@ class Agent:
 
 
     #Move rules defined for the agent with tweakable stepping size
-    def move(self, width, height, step_size=2):
+    def move(self, width, height, step_size=5):
 
             #If the agent is at home, start a new trip with a fresh random destination
             if self.phase == "at_home":

@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover
 class Simulation:
     
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
-    def __init__(self, num_agents, width, height, disease):
+    def __init__(self, num_agents, width, height, disease, vaccination_fraction=0.2):
         
         #Set the number of agents equal to input value
         self.num_agents = num_agents
@@ -34,7 +34,9 @@ class Simulation:
         # Initialize agents spawn points on the border so that each agent
         # "lives" at its own house on the edge of the simulation area.
         # (Iterate N number of times based on agent amount)
-        for _ in range(num_agents):
+        # Vaccination status is deterministic so you can control it from `main.py`.
+        vaccinated_count = int(num_agents * vaccination_fraction)
+        for idx in range(num_agents):
 
             #Choose a random side of the border: left, right, top, or bottom
             side = random.choice(["left", "right", "top", "bottom"])
@@ -52,10 +54,13 @@ class Simulation:
                 x = random.uniform(0, width)
                 y = height
 
+            # Vaccination status is deterministic (no randomness here).
+            vaccinated = idx < vaccinated_count
+
             #Initialize a new agent at specified X and Y value gathered from above.
             #Each agent will remember this as its "home" location and will start
             #by moving toward the center of the area before returning home.
-            self.agents.append(Agent(x, y))
+            self.agents.append(Agent(x, y, vaccinated=vaccinated))
 
 
         #Set a single agent to be infected
@@ -92,9 +97,15 @@ class Simulation:
                         
                         #If the agent is susceptible, verify the distance between the infected and susceptible agent is less than 2
                         if agent.distance(other) < 3:
-                            
-                            #Reference the probability of infection against random number rolled.  If the random number is less than the probability, infect the agent
-                            if random.random() < self.disease.transmission_probability:
+                            # Vaccinated agents have reduced infection risk.
+                            effective_prob = self.disease.transmission_probability
+                            if other.vaccinated:
+                                efficacy = getattr(self.disease, "vaccination_efficacy", 0.0)
+                                risk_multiplier = max(0.0, min(1.0, 1.0 - efficacy))
+                                effective_prob = effective_prob * risk_multiplier
+
+                            #Reference the probability of infection against random number rolled.
+                            if random.random() < effective_prob:
                                 other.infect()
 
 
@@ -141,6 +152,7 @@ class Simulation:
         susceptible = self.susceptible_counts[-1]
         infected = self.infected_counts[-1]
         recovered = self.recovered_counts[-1]
+        vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
 
         cpu_percent = ""
         memory_percent = ""
@@ -164,6 +176,7 @@ class Simulation:
             "susceptible": susceptible,
             "infected": infected,
             "recovered": recovered,
+            "vaccinated": vaccinated,
             "transmission_probability": self.disease.transmission_probability,
             "entity_count": self.num_agents,
             "cpu_percent": cpu_percent,
@@ -179,6 +192,7 @@ class Simulation:
             "susceptible",
             "infected",
             "recovered",
+            "vaccinated",
             "transmission_probability",
             "entity_count",
             "cpu_percent",
@@ -193,7 +207,7 @@ class Simulation:
             os.makedirs(parent, exist_ok=True)
 
         with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
