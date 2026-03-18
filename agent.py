@@ -22,25 +22,32 @@ class Agent:
         self.state = state  # Susceptible, Infected or Recovered
         self.time_infected = 0 # Timeframe used to determine if current agent has had ample time to recover from infection (MAY CHANGE)
 
-        #Movement phase: agents start at home, then go to the center and finally return home
-        #Valid phases: "to_center", "to_home", "at_home"
-        self.phase = "to_center"
+        #Each agent travels: home -> random destination -> home (repeats)
+        #Valid phases: "to_target", "to_home", "at_home"
+        self.phase = "at_home"
+
+        #Per-trip random destination (set when leaving home)
+        self.target_x = None
+        self.target_y = None
+
+    def choose_new_target(self, width, height, border_margin=1.0):
+        #Pick a random point inside the simulation area (avoid exact border points)
+        self.target_x = random.uniform(border_margin, max(border_margin, width - border_margin))
+        self.target_y = random.uniform(border_margin, max(border_margin, height - border_margin))
 
 
 
     #Move rules defined for the agent with tweakable stepping size
     def move(self, width, height, step_size=2):
 
-            #If the agent has already returned home, keep it at home
+            #If the agent is at home, start a new trip with a fresh random destination
             if self.phase == "at_home":
-                return
+                self.choose_new_target(width, height)
+                self.phase = "to_target"
 
             #Determine the current movement target
-            center_x = width / 2
-            center_y = height / 2
-
-            if self.phase == "to_center":
-                target_x, target_y = center_x, center_y
+            if self.phase == "to_target":
+                target_x, target_y = self.target_x, self.target_y
             elif self.phase == "to_home":
                 target_x, target_y = self.home_x, self.home_y
             else:
@@ -67,15 +74,15 @@ class Agent:
 
             #Update phase transitions based on proximity to targets
             #Thresholds can be tuned; they are in simulation units
-            center_threshold = max(width, height) * 0.05  # within 5% of the largest dimension counts as "at center"
+            target_threshold = step_size  # close enough to the destination
             home_threshold = step_size  # close enough to home
 
-            #Check if we have reached the center and should start going home
-            if self.phase == "to_center":
-                if math.hypot(self.x - center_x, self.y - center_y) <= center_threshold:
+            #Check if we have reached the destination and should start going home
+            if self.phase == "to_target":
+                if math.hypot(self.x - self.target_x, self.y - self.target_y) <= target_threshold:
                     self.phase = "to_home"
 
-            #Check if we have returned home and should stay there
+            #Check if we have returned home; if so, start a new trip next step
             if self.phase == "to_home":
                 if math.hypot(self.x - self.home_x, self.y - self.home_y) <= home_threshold:
                     self.phase = "at_home"
