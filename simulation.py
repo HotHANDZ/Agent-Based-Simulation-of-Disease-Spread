@@ -4,11 +4,6 @@ import os
 from datetime import datetime
 from agent import Agent
 
-try:
-    import psutil  # type: ignore  # Used for CPU and memory utilization %
-except ImportError:  # pragma: no cover
-    psutil = None
-
 class Simulation:
     
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
@@ -154,21 +149,18 @@ class Simulation:
         recovered = self.recovered_counts[-1]
         vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
 
-        cpu_percent = ""
-        memory_percent = ""
-        process_memory_percent = ""
-        process_cpu_percent = ""
+        vaccination_efficacy = getattr(self.disease, "vaccination_efficacy", 0.0)
+        vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
 
-        if psutil is not None:
-            try:
-                cpu_percent = psutil.cpu_percent(interval=None)
-                memory_percent = psutil.virtual_memory().percent
-                process = psutil.Process(os.getpid())
-                process_memory_percent = process.memory_percent()
-                process_cpu_percent = process.cpu_percent(interval=None)
-            except Exception:
-                # If metrics fail for any reason, keep values blank.
-                pass
+        # Our infection model scales transmission probability by:
+        # - 1.0 for unvaccinated susceptibles
+        # - (1 - vaccination_efficacy) for vaccinated susceptibles
+        # So the expected (weighted) effective transmission probability is:
+        #   base * [(1-v) * 1 + v * (1 - e)] = base * (1 - v * e)
+        base_transmission_probability = self.disease.transmission_probability
+        effective_transmission_probability = base_transmission_probability * (1.0 - vaccinated_fraction * vaccination_efficacy)
+        effective_transmission_probability = max(0.0, min(base_transmission_probability, effective_transmission_probability))
+        transmission_probability_reduction = base_transmission_probability - effective_transmission_probability
 
         return {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -177,12 +169,12 @@ class Simulation:
             "infected": infected,
             "recovered": recovered,
             "vaccinated": vaccinated,
-            "transmission_probability": self.disease.transmission_probability,
+            "transmission_probability": base_transmission_probability,
+            "vaccination_efficacy": vaccination_efficacy,
+            "vaccinated_fraction": vaccinated_fraction,
+            "effective_transmission_probability": effective_transmission_probability,
+            "transmission_probability_reduction": transmission_probability_reduction,
             "entity_count": self.num_agents,
-            "cpu_percent": cpu_percent,
-            "memory_percent": memory_percent,
-            "process_memory_percent": process_memory_percent,
-            "process_cpu_percent": process_cpu_percent,
         }
 
     def _write_run_log(self, path, rows, delimiter="\t"):
@@ -194,11 +186,11 @@ class Simulation:
             "recovered",
             "vaccinated",
             "transmission_probability",
+            "vaccination_efficacy",
+            "vaccinated_fraction",
+            "effective_transmission_probability",
+            "transmission_probability_reduction",
             "entity_count",
-            "cpu_percent",
-            "memory_percent",
-            "process_memory_percent",
-            "process_cpu_percent",
         ]
 
         # Ensure output directory exists (if user gave a nested path)
@@ -218,14 +210,6 @@ class Simulation:
 
         Logs are written to a timestamped TSV file (tab-delimited) by default.
         """
-        # Prime psutil CPU percent sampling so first reported value is meaningful.
-        if psutil is not None:
-            try:
-                psutil.cpu_percent(interval=None)
-                psutil.Process(os.getpid()).cpu_percent(interval=None)
-            except Exception:
-                pass
-
         if output_csv_path is None:
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_csv_path = f"run_log_{stamp}.tsv"
