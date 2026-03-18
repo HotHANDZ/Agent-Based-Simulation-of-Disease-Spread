@@ -1,5 +1,13 @@
 import random
+import csv
+import os
+from datetime import datetime
 from agent import Agent
+
+try:
+    import psutil  # type: ignore  # Used for CPU and memory utilization %
+except ImportError:  # pragma: no cover
+    psutil = None
 
 class Simulation:
     
@@ -128,13 +136,98 @@ class Simulation:
         self.recovered_counts.append(r)
         
     #Itterate through "time" as per the number defined by "time steps" in Main
-    def run(self, steps):
+    def _collect_run_metrics(self):
+        # Counts correspond to the last recorded step (after `step()` runs).
+        susceptible = self.susceptible_counts[-1]
+        infected = self.infected_counts[-1]
+        recovered = self.recovered_counts[-1]
+
+        cpu_percent = ""
+        memory_percent = ""
+        process_memory_percent = ""
+        process_cpu_percent = ""
+
+        if psutil is not None:
+            try:
+                cpu_percent = psutil.cpu_percent(interval=None)
+                memory_percent = psutil.virtual_memory().percent
+                process = psutil.Process(os.getpid())
+                process_memory_percent = process.memory_percent()
+                process_cpu_percent = process.cpu_percent(interval=None)
+            except Exception:
+                # If metrics fail for any reason, keep values blank.
+                pass
+
+        return {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "timestep": self.time,
+            "susceptible": susceptible,
+            "infected": infected,
+            "recovered": recovered,
+            "transmission_probability": self.disease.transmission_probability,
+            "entity_count": self.num_agents,
+            "cpu_percent": cpu_percent,
+            "memory_percent": memory_percent,
+            "process_memory_percent": process_memory_percent,
+            "process_cpu_percent": process_cpu_percent,
+        }
+
+    def _write_run_log(self, path, rows, delimiter="\t"):
+        fieldnames = [
+            "timestamp",
+            "timestep",
+            "susceptible",
+            "infected",
+            "recovered",
+            "transmission_probability",
+            "entity_count",
+            "cpu_percent",
+            "memory_percent",
+            "process_memory_percent",
+            "process_cpu_percent",
+        ]
+
+        # Ensure output directory exists (if user gave a nested path)
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+
+    def run(self, steps, log_interval=1000, output_csv_path=None):
+        """
+        Run the simulation and collect metrics every `log_interval` timesteps.
+
+        Logs are written to a timestamped TSV file (tab-delimited) by default.
+        """
+        # Prime psutil CPU percent sampling so first reported value is meaningful.
+        if psutil is not None:
+            try:
+                psutil.cpu_percent(interval=None)
+                psutil.Process(os.getpid()).cpu_percent(interval=None)
+            except Exception:
+                pass
+
+        if output_csv_path is None:
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_csv_path = f"run_log_{stamp}.tsv"
+
+        run_rows = []
+
         for t in range(steps):
             self.step()
-            
-            
-            #DEBUG PRINT EVERY TIME STAMP - Uncomment this to see status at every time step
-            #print(f"Step {t}: Susceptible={self.susceptible_counts[-1]} Infected={self.infected_counts[-1]} Recovered={self.recovered_counts[-1]}")
+
+            # Record metrics at every 1000 timesteps (and any other interval requested)
+            if log_interval and (self.time % log_interval == 0):
+                run_rows.append(self._collect_run_metrics())
+
+        # After a successful run, write collected data to disk.
+        self._write_run_log(output_csv_path, run_rows, delimiter="\t")
+        self.last_run_log_path = output_csv_path
 
     #Plot points on 2D chart
     def plot(self):
