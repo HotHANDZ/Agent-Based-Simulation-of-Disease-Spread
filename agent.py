@@ -33,6 +33,9 @@ class Agent:
         self.target_x = None
         self.target_y = None
 
+        # When True, this agent (if infected) must go home and stay there until recovered.
+        self._stay_home_until_recovered = False
+
     def choose_new_target(self, width, height, border_margin=1.0):
         #Pick a random point inside the simulation area (avoid exact border points)
         self.target_x = random.uniform(border_margin, max(border_margin, width - border_margin))
@@ -42,6 +45,21 @@ class Agent:
 
     #Move rules defined for the agent with tweakable stepping size
     def move(self, width, height, step_size=5):
+
+            # Bedridden infected agents go home and stay there until recovered.
+            if self.state == "Infected" and getattr(self, "_stay_home_until_recovered", False):
+                target_x, target_y = self.home_x, self.home_y
+                vx = target_x - self.x
+                vy = target_y - self.y
+                distance_to_target = math.hypot(vx, vy)
+                if distance_to_target > 0:
+                    scale = min(step_size, distance_to_target) / distance_to_target
+                    dx, dy = vx * scale, vy * scale
+                else:
+                    dx, dy = 0, 0
+                self.x = max(0, min(width, self.x + dx))
+                self.y = max(0, min(height, self.y + dy))
+                return
 
             #If the agent is at home, start a new trip with a fresh random destination
             if self.phase == "at_home":
@@ -101,17 +119,16 @@ class Agent:
     
     
     #Simple implementation of getting "infected" by checking the current state of the agent and verifying it is "Susceptible" before infecting
-    def infect(self):
-        
-        
-        
+    def infect(self, bedridden=False):
         #Sets the state to infected if current state is susceptible and sets the time to 0
         if self.state == "Susceptible":
             self.state = "Infected"
-            self.time_infected = 0 #Value will increment up as time goes on until specified value for recovery
+            self.time_infected = 0  # Value will increment up as time goes on until specified value for recovery
+            self._stay_home_until_recovered = bedridden  # If True, agent goes home and stays until recovered
 
 
 
     #Once the time hits the necessary recovered limit, change the value from "Infected" to "Recovered"
     def recover(self):
         self.state = "Recovered"
+        self._stay_home_until_recovered = False  # No longer bedridden; can move normally again

@@ -8,7 +8,7 @@ from agent import Agent
 class Simulation:
     
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
-    def __init__(self, num_agents, width, height, disease, vaccination_fraction=0.2):
+    def __init__(self, num_agents, width, height, disease, vaccination_fraction=0.2, bedridden=False):
         
         #Set the number of agents equal to input value
         self.num_agents = num_agents
@@ -22,6 +22,9 @@ class Simulation:
         
         #Use the DiseaseModel class [Inside disease.py] for reference on infection
         self.disease = disease
+        
+        # When True, infected agents go home and stay there until they recover.
+        self.bedridden = bedridden
         
         #Set initial time at 0 - used as reference for agents to recover and for data gethering
         self.time = 0
@@ -78,7 +81,7 @@ class Simulation:
 
 
         #Set a single agent to be infected
-        self.agents[0].infect()
+        self.agents[0].infect(bedridden=self.bedridden)
 
 
 
@@ -120,7 +123,7 @@ class Simulation:
 
                             #Reference the probability of infection against random number rolled.
                             if random.random() < effective_prob:
-                                other.infect()
+                                other.infect(bedridden=self.bedridden)
 
 
         #Logic for agent recovery
