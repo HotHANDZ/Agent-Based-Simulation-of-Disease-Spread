@@ -2,6 +2,7 @@ import random
 import csv
 import os
 from datetime import datetime
+import time
 from agent import Agent
 
 class Simulation:
@@ -162,6 +163,15 @@ class Simulation:
         effective_transmission_probability = max(0.0, min(base_transmission_probability, effective_transmission_probability))
         transmission_probability_reduction = base_transmission_probability - effective_transmission_probability
 
+        elapsed_seconds = ""
+        runtime_mm_ss = ""
+        if hasattr(self, "_run_start_perf_counter"):
+            elapsed_seconds_value = max(0.0, time.perf_counter() - self._run_start_perf_counter)
+            elapsed_seconds = round(elapsed_seconds_value, 3)
+            minutes = int(elapsed_seconds_value // 60)
+            seconds = int(elapsed_seconds_value % 60)
+            runtime_mm_ss = f"{minutes:02d}:{seconds:02d}"
+
         return {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "timestep": self.time,
@@ -175,6 +185,8 @@ class Simulation:
             "effective_transmission_probability": effective_transmission_probability,
             "transmission_probability_reduction": transmission_probability_reduction,
             "entity_count": self.num_agents,
+            "elapsed_seconds": elapsed_seconds,
+            "runtime_mm_ss": runtime_mm_ss,
         }
 
     def _write_run_log(self, path, rows, delimiter="\t"):
@@ -191,6 +203,8 @@ class Simulation:
             "effective_transmission_probability",
             "transmission_probability_reduction",
             "entity_count",
+            "elapsed_seconds",
+            "runtime_mm_ss",
         ]
 
         # Ensure output directory exists (if user gave a nested path)
@@ -213,6 +227,9 @@ class Simulation:
         if output_csv_path is None:
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_csv_path = f"run_log_{stamp}.tsv"
+
+        # Track total runtime (used for TSV logging)
+        self._run_start_perf_counter = time.perf_counter()
 
         run_rows = []
 
