@@ -27,36 +27,54 @@ class Simulation:
         self.time = 0
 
 
-        # Initialize agents spawn points on the border so that each agent
-        # "lives" at its own house on the edge of the simulation area.
-        # (Iterate N number of times based on agent amount)
+        # Initialize agents homes on the border edges.
+        # Spawn distribution:
+        # - 1/4 on the north edge (y = 0)
+        # - 1/4 on the south edge (y = height)
+        # - 1/4 on the east edge  (x = width)
+        # - 1/4 on the west edge  (x = 0)
+        # If num_agents is not divisible by 4, the remainder is distributed in this order:
+        # north, south, east, west.
         # Vaccination status is deterministic so you can control it from `main.py`.
         vaccinated_count = int(num_agents * vaccination_fraction)
-        for idx in range(num_agents):
 
-            #Choose a random side of the border: left, right, top, or bottom
-            side = random.choice(["left", "right", "top", "bottom"])
+        base = num_agents // 4
+        remainder = num_agents % 4
+        edge_counts = [base, base, base, base]  # [north, south, east, west]
+        for k in range(remainder):
+            edge_counts[k] += 1
 
-            if side == "left":
-                x = 0
-                y = random.uniform(0, height)
-            elif side == "right":
-                x = width
-                y = random.uniform(0, height)
-            elif side == "top":
-                x = random.uniform(0, width)
-                y = 0
-            else:  # "bottom"
-                x = random.uniform(0, width)
-                y = height
+        north_count, south_count, east_count, west_count = edge_counts
 
-            # Vaccination status is deterministic (no randomness here).
+        # Add agents in the order: north, south, east, west.
+        # Use evenly spaced positions along each edge to avoid homes stacking.
+        idx = 0
+
+        def add_agent(x, y):
+            nonlocal idx
             vaccinated = idx < vaccinated_count
-
-            #Initialize a new agent at specified X and Y value gathered from above.
-            #Each agent will remember this as its "home" location and will start
-            #by moving toward the center of the area before returning home.
             self.agents.append(Agent(x, y, vaccinated=vaccinated))
+            idx += 1
+
+        # north edge: y = 0, x spans the width (excluding corners)
+        for i in range(north_count):
+            x = ((i + 1) / (north_count + 1)) * width
+            add_agent(x, 0)
+
+        # south edge: y = height, x spans the width (excluding corners)
+        for i in range(south_count):
+            x = ((i + 1) / (south_count + 1)) * width
+            add_agent(x, height)
+
+        # east edge: x = width, y spans the height (excluding corners)
+        for i in range(east_count):
+            y = ((i + 1) / (east_count + 1)) * height
+            add_agent(width, y)
+
+        # west edge: x = 0, y spans the height (excluding corners)
+        for i in range(west_count):
+            y = ((i + 1) / (west_count + 1)) * height
+            add_agent(0, y)
 
 
         #Set a single agent to be infected
