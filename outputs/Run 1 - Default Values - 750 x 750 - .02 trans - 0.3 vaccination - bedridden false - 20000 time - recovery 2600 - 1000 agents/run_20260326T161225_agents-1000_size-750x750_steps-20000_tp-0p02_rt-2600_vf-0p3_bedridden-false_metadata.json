@@ -1,0 +1,39 @@
+{
+  "dataset_schema_version": "1.0",
+  "run_real_start_time_iso8601": "2026-03-26T16:12:25",
+  "simulation_parameters": {
+    "num_agents_count": 1000,
+    "space_width_units": 750,
+    "space_height_units": 750,
+    "planned_timesteps_count": 20000,
+    "log_interval_timesteps": 1000,
+    "bedridden_policy_enabled": false,
+    "transmission_probability_fraction": 0.02,
+    "recovery_time_timesteps": 2600,
+    "vaccinated_agents_count": 300,
+    "vaccinated_fraction": 0.3
+  },
+  "units": {
+    "simulation_timestep_step": "step",
+    "real_elapsed_seconds_s": "s",
+    "susceptible_agents_count": "agents",
+    "infected_agents_count": "agents",
+    "recovered_agents_count": "agents",
+    "vaccinated_agents_count": "agents",
+    "transmission_probability_fraction": "fraction",
+    "vaccination_efficacy_fraction": "fraction",
+    "vaccinated_fraction": "fraction",
+    "effective_transmission_probability_fraction": "fraction",
+    "transmission_probability_reduction_fraction": "fraction",
+    "entity_count_agents": "agents"
+  },
+  "run_label": "run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false",
+  "output_directory": "outputs\\run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false",
+  "output_files": {
+    "timeseries_csv": "outputs\\run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false\\run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false_timeseries.csv",
+    "metadata_json": "outputs\\run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false\\run_20260326T161225_agents-1000_size-750x750_steps-20000_tp-0p02_rt-2600_vf-0p3_bedridden-false_metadata.json"
+  },
+  "run_real_end_time_iso8601": "2026-03-26T16:15:46",
+  "run_real_elapsed_seconds_s": 201.029,
+  "logged_rows_count": 20
+}

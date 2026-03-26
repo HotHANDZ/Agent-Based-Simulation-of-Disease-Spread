@@ -2,20 +2,20 @@ from disease import DiseaseModel
 from simulation import Simulation
 
 #Define parameters for initializing components
-num_agents = 1000
+num_agents = 500
 
 # Fraction of agents that start vaccinated (deterministic assignment inside Simulation)
-vaccination_fraction = 0.2
+vaccination_fraction = 1
 
 # When True, infected agents go home and stay there until they recover.
-bedridden = False
+bedridden = True
 
 #Use a significantly larger simulation area so that movement
 #from the border to the center and back is more visible.
-width = 1000
-height = 1000
-transmission_prob = .05
-recovery_time = 1600
+width = 500
+height = 500
+transmission_prob = .7
+recovery_time = 4000
 timesteps = 10000
 
 #Initialize disease and simulation

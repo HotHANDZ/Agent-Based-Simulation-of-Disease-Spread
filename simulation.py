@@ -1,6 +1,7 @@
 import random
 import csv
 import os
+import json
 from datetime import datetime
 import time
 from agent import Agent
@@ -28,6 +29,7 @@ class Simulation:
         
         #Set initial time at 0 - used as reference for agents to recover and for data gethering
         self.time = 0
+        self.run_started_at = None
 
 
         # Initialize agents homes on the border edges.
@@ -53,10 +55,13 @@ class Simulation:
         # Use evenly spaced positions along each edge to avoid homes stacking.
         idx = 0
 
-        def add_agent(x, y):
+        def add_agent(home_x, home_y):
             nonlocal idx
             vaccinated = idx < vaccinated_count
-            self.agents.append(Agent(x, y, vaccinated=vaccinated))
+            # Agents keep a home on the border, but start at random interior positions.
+            spawn_x = random.uniform(0, width)
+            spawn_y = random.uniform(0, height)
+            self.agents.append(Agent(spawn_x, spawn_y, vaccinated=vaccinated, home_x=home_x, home_y=home_y))
             idx += 1
 
         # north edge: y = 0, x spans the width (excluding corners)
@@ -164,6 +169,67 @@ class Simulation:
         self.recovered_counts.append(r)
         
     #Itterate through "time" as per the number defined by "time steps" in Main
+    def _format_param_for_filename(self, value):
+        if isinstance(value, float):
+            # Avoid dots in filenames while keeping values readable.
+            return f"{value:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    def _build_default_run_paths(self, steps):
+        real_start = datetime.now()
+        run_stamp = real_start.strftime("%Y%m%dT%H%M%S")
+
+        run_label = (
+            f"run_{run_stamp}"
+            f"_agents-{self.num_agents}"
+            f"_size-{self.width}x{self.height}"
+            f"_steps-{steps}"
+            f"_tp-{self._format_param_for_filename(self.disease.transmission_probability)}"
+            f"_rt-{self._format_param_for_filename(self.disease.recovery_time)}"
+            f"_vf-{self._format_param_for_filename(sum(1 for a in self.agents if getattr(a, 'vaccinated', False)) / self.num_agents if self.num_agents else 0.0)}"
+            f"_bedridden-{self._format_param_for_filename(self.bedridden)}"
+        )
+        run_dir = os.path.join("outputs", run_label)
+        csv_path = os.path.join(run_dir, f"{run_label}_timeseries.csv")
+        metadata_json_path = os.path.join(run_dir, f"{run_label}_metadata.json")
+        return run_label, run_dir, csv_path, metadata_json_path, real_start
+
+    def _collect_static_run_metadata(self, steps, log_interval, real_start):
+        vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
+        vaccination_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
+        return {
+            "dataset_schema_version": "1.0",
+            "run_real_start_time_iso8601": real_start.isoformat(timespec="seconds"),
+            "simulation_parameters": {
+                "num_agents_count": self.num_agents,
+                "space_width_units": self.width,
+                "space_height_units": self.height,
+                "planned_timesteps_count": steps,
+                "log_interval_timesteps": log_interval,
+                "bedridden_policy_enabled": self.bedridden,
+                "transmission_probability_fraction": self.disease.transmission_probability,
+                "recovery_time_timesteps": self.disease.recovery_time,
+                "vaccinated_agents_count": vaccinated,
+                "vaccinated_fraction": vaccination_fraction,
+            },
+            "units": {
+                "simulation_timestep_step": "step",
+                "real_elapsed_seconds_s": "s",
+                "susceptible_agents_count": "agents",
+                "infected_agents_count": "agents",
+                "recovered_agents_count": "agents",
+                "vaccinated_agents_count": "agents",
+                "transmission_probability_fraction": "fraction",
+                "vaccination_efficacy_fraction": "fraction",
+                "vaccinated_fraction": "fraction",
+                "effective_transmission_probability_fraction": "fraction",
+                "transmission_probability_reduction_fraction": "fraction",
+                "entity_count_agents": "agents",
+            },
+        }
+
     def _collect_run_metrics(self):
         # Counts correspond to the last recorded step (after `step()` runs).
         susceptible = self.susceptible_counts[-1]
@@ -194,37 +260,37 @@ class Simulation:
             runtime_mm_ss = f"{minutes:02d}:{seconds:02d}"
 
         return {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "timestep": self.time,
-            "susceptible": susceptible,
-            "infected": infected,
-            "recovered": recovered,
-            "vaccinated": vaccinated,
-            "transmission_probability": base_transmission_probability,
-            "vaccination_efficacy": vaccination_efficacy,
+            "real_time_iso8601": datetime.now().isoformat(timespec="seconds"),
+            "simulation_timestep_step": self.time,
+            "susceptible_agents_count": susceptible,
+            "infected_agents_count": infected,
+            "recovered_agents_count": recovered,
+            "vaccinated_agents_count": vaccinated,
+            "transmission_probability_fraction": base_transmission_probability,
+            "vaccination_efficacy_fraction": vaccination_efficacy,
             "vaccinated_fraction": vaccinated_fraction,
-            "effective_transmission_probability": effective_transmission_probability,
-            "transmission_probability_reduction": transmission_probability_reduction,
-            "entity_count": self.num_agents,
-            "elapsed_seconds": elapsed_seconds,
+            "effective_transmission_probability_fraction": effective_transmission_probability,
+            "transmission_probability_reduction_fraction": transmission_probability_reduction,
+            "entity_count_agents": self.num_agents,
+            "real_elapsed_seconds_s": elapsed_seconds,
             "runtime_mm_ss": runtime_mm_ss,
         }
 
-    def _write_run_log(self, path, rows, delimiter="\t"):
+    def _write_run_log_csv(self, path, rows):
         fieldnames = [
-            "timestamp",
-            "timestep",
-            "susceptible",
-            "infected",
-            "recovered",
-            "vaccinated",
-            "transmission_probability",
-            "vaccination_efficacy",
+            "real_time_iso8601",
+            "simulation_timestep_step",
+            "susceptible_agents_count",
+            "infected_agents_count",
+            "recovered_agents_count",
+            "vaccinated_agents_count",
+            "transmission_probability_fraction",
+            "vaccination_efficacy_fraction",
             "vaccinated_fraction",
-            "effective_transmission_probability",
-            "transmission_probability_reduction",
-            "entity_count",
-            "elapsed_seconds",
+            "effective_transmission_probability_fraction",
+            "transmission_probability_reduction_fraction",
+            "entity_count_agents",
+            "real_elapsed_seconds_s",
             "runtime_mm_ss",
         ]
 
@@ -234,23 +300,39 @@ class Simulation:
             os.makedirs(parent, exist_ok=True)
 
         with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
 
-    def run(self, steps, log_interval=1000, output_csv_path=None):
+    def _write_metadata_json(self, path, metadata):
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
+
+    def run(self, steps, log_interval=1000, output_csv_path=None, output_metadata_path=None):
         """
         Run the simulation and collect metrics every `log_interval` timesteps.
 
-        Logs are written to a timestamped TSV file (tab-delimited) by default.
+        By default this writes:
+        - a CSV time-series dataset
+        - a JSON metadata file
+        into a systematically named run folder under `outputs/`.
         """
+        run_label, run_dir, default_csv_path, default_metadata_path, real_start = self._build_default_run_paths(steps)
         if output_csv_path is None:
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_csv_path = f"run_log_{stamp}.tsv"
+            output_csv_path = default_csv_path
+        if output_metadata_path is None:
+            output_metadata_path = default_metadata_path
 
-        # Track total runtime (used for TSV logging)
+        print(f"[run] num_agents={self.num_agents}, steps={steps}, log_interval={log_interval}")
+
+        # Track total runtime and set real-time start stamp.
         self._run_start_perf_counter = time.perf_counter()
+        self.run_started_at = real_start.isoformat(timespec="seconds")
 
         run_rows = []
 
@@ -261,26 +343,63 @@ class Simulation:
             if log_interval and (self.time % log_interval == 0):
                 run_rows.append(self._collect_run_metrics())
 
-        # After a successful run, write collected data to disk.
-        self._write_run_log(output_csv_path, run_rows, delimiter="\t")
+        # Write portable run artifacts with documented fields/units.
+        self._write_run_log_csv(output_csv_path, run_rows)
+        total_elapsed_seconds = max(0.0, time.perf_counter() - self._run_start_perf_counter)
+        metadata = self._collect_static_run_metadata(steps, log_interval, real_start)
+        metadata.update(
+            {
+                "run_label": run_label,
+                "output_directory": run_dir,
+                "output_files": {
+                    "timeseries_csv": output_csv_path,
+                    "metadata_json": output_metadata_path,
+                },
+                "run_real_end_time_iso8601": datetime.now().isoformat(timespec="seconds"),
+                "run_real_elapsed_seconds_s": round(total_elapsed_seconds, 3),
+                "logged_rows_count": len(run_rows),
+            }
+        )
+        self._write_metadata_json(output_metadata_path, metadata)
         self.last_run_log_path = output_csv_path
+        self.last_run_metadata_path = output_metadata_path
 
-    #Plot points on 2D chart
+    # Plot points on a 2D chart and save into the latest run folder.
     def plot(self):
-        
-        #Used for graphical representation
         import matplotlib.pyplot as plt
-        
-        #Plot number of each respective type of agent
-        plt.plot(self.susceptible_counts, label="Susceptible")
-        plt.plot(self.infected_counts, label="Infected")
-        plt.plot(self.recovered_counts, label="Recovered")
-        
-        #Define x axis as time
-        plt.xlabel("Time Steps")
-        
-        #Define y axis as number of agents
-        plt.ylabel("Number of Agents")
-        
-        plt.legend()
+        # Diagnostic: confirm the plotted values match the run settings.
+        print(
+            f"[plot] num_agents={self.num_agents}, time_points={len(self.susceptible_counts)}"
+        )
+
+        vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
+        vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
+
+        transmission_probability = self.disease.transmission_probability
+        recovery_time = self.disease.recovery_time
+
+        fig, ax = plt.subplots()
+        ax.plot(self.susceptible_counts, label="Susceptible")
+        ax.plot(self.infected_counts, label="Infected")
+        ax.plot(self.recovered_counts, label="Recovered")
+
+        ax.set_xlabel("Time Steps")
+        ax.set_ylabel("Number of Agents")
+        ax.set_ylim(0, self.num_agents)  # Helps prevent misleading tick labels.
+        if self.num_agents:
+            ax.set_yticks([0, self.num_agents])
+
+        ax.set_title(
+            f"SIR (agents={self.num_agents}, vacc_frac={vaccinated_fraction:.3f}, tp={transmission_probability:.4f}, rt={recovery_time})"
+        )
+        ax.legend()
+        fig.tight_layout()
+
+        # Save into the same run folder by default.
+        if hasattr(self, "last_run_log_path") and self.last_run_log_path:
+            run_dir = os.path.dirname(os.path.abspath(self.last_run_log_path))
+            save_png_path = os.path.join(run_dir, "run_plot.png")
+            fig.savefig(save_png_path, dpi=150)
+
         plt.show()
+        return fig

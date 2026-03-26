@@ -8,15 +8,15 @@ class Agent:
     
     
     #Constructor for agent
-    def __init__(self, x, y, state="Susceptible", vaccinated=False):
+    def __init__(self, x, y, state="Susceptible", vaccinated=False, home_x=None, home_y=None):
         
         #Position tracking on an X Y coordinate
         self.x = x
         self.y = y
 
         #Remember the agent's "home" location (spawn point on the border)
-        self.home_x = x
-        self.home_y = y
+        self.home_x = x if home_x is None else home_x
+        self.home_y = y if home_y is None else home_y
         
         #Tracking of current agent state
         self.state = state  # Susceptible, Infected or Recovered

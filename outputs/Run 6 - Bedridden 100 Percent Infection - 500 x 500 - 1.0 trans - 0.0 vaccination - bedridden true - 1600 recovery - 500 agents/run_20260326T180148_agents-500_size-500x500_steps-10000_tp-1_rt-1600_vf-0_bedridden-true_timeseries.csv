@@ -1,0 +1,11 @@
+real_time_iso8601,simulation_timestep_step,susceptible_agents_count,infected_agents_count,recovered_agents_count,vaccinated_agents_count,transmission_probability_fraction,vaccination_efficacy_fraction,vaccinated_fraction,effective_transmission_probability_fraction,transmission_probability_reduction_fraction,entity_count_agents,real_elapsed_seconds_s,runtime_mm_ss
+2026-03-26T18:01:57,1000,55,445,0,0,1,0.5,0.0,1,0,500,9.356,00:09
+2026-03-26T18:02:02,2000,14,139,347,0,1,0.5,0.0,1,0,500,14.278,00:14
+2026-03-26T18:02:03,3000,7,21,472,0,1,0.5,0.0,1,0,500,15.187,00:15
+2026-03-26T18:02:03,4000,6,3,491,0,1,0.5,0.0,1,0,500,15.551,00:15
+2026-03-26T18:02:04,5000,6,1,493,0,1,0.5,0.0,1,0,500,15.841,00:15
+2026-03-26T18:02:04,6000,6,0,494,0,1,0.5,0.0,1,0,500,16.119,00:16
+2026-03-26T18:02:04,7000,6,0,494,0,1,0.5,0.0,1,0,500,16.398,00:16
+2026-03-26T18:02:04,8000,6,0,494,0,1,0.5,0.0,1,0,500,16.674,00:16
+2026-03-26T18:02:05,9000,6,0,494,0,1,0.5,0.0,1,0,500,16.954,00:16
+2026-03-26T18:02:05,10000,6,0,494,0,1,0.5,0.0,1,0,500,17.229,00:17
