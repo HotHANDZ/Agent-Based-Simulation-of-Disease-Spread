@@ -2,19 +2,22 @@ import random
 import math
 
 class Agent:
-    
-    #Create the agent class with attributes that we can call on later.  We will need a movement system, a system to track the
-    #status of current infection state, and a way to check how close to another agent the current agent is for transmission.
-    
-    
-    #Constructor for agent
+    """
+    One person in the simulation.
+
+    Significant features:
+    - (x, y) is current position; (home_x, home_y) is the border home used for return trips.
+    - Movement is a repeating cycle: at home → pick random interior target → go there → return home.
+    - If infected under the "bedridden" policy, movement is overridden: go to home and stay until recover().
+    - vaccinated only matters while Susceptible: Simulation scales infection probability using DiseaseModel.vaccination_efficacy.
+    """
     def __init__(self, x, y, state="Susceptible", vaccinated=False, home_x=None, home_y=None):
         
         #Position tracking on an X Y coordinate
         self.x = x
         self.y = y
 
-        #Remember the agent's "home" location (spawn point on the border)
+        # Fixed border home (assigned by Simulation); may differ from initial (x, y) when agents spawn in the interior.
         self.home_x = x if home_x is None else home_x
         self.home_y = y if home_y is None else home_y
         
@@ -33,7 +36,7 @@ class Agent:
         self.target_x = None
         self.target_y = None
 
-        # When True, this agent (if infected) must go home and stay there until recovered.
+        # Set True on infect(bedridden=True): infected agent heads to home and does not take normal trips until recovery.
         self._stay_home_until_recovered = False
 
     def choose_new_target(self, width, height, border_margin=1.0):
@@ -43,10 +46,8 @@ class Agent:
 
 
 
-    #Move rules defined for the agent with tweakable stepping size
     def move(self, width, height, step_size=5):
-
-            # Bedridden infected agents go home and stay there until recovered.
+            # Branch A — quarantine / bedridden: single-minded travel toward home each timestep.
             if self.state == "Infected" and getattr(self, "_stay_home_until_recovered", False):
                 target_x, target_y = self.home_x, self.home_y
                 vx = target_x - self.x
@@ -61,7 +62,7 @@ class Agent:
                 self.y = max(0, min(height, self.y + dy))
                 return
 
-            #If the agent is at home, start a new trip with a fresh random destination
+            # Branch B — normal commuting: at_home → to_target (interior) → to_home (border) → at_home.
             if self.phase == "at_home":
                 self.choose_new_target(width, height)
                 self.phase = "to_target"

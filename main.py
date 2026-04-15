@@ -1,7 +1,13 @@
+"""
+Entry point: tweak scenario parameters here, then run.
+
+Flow: DiseaseModel (global tp / recovery / vaccine efficacy) → Simulation (agents, movement, SIR dynamics)
+→ outputs/ CSV+JSON from run(), chart from plot().
+"""
 from disease import DiseaseModel
 from simulation import Simulation
 
-#Define parameters for initializing components
+# Scenario knobs (saved file must be saved before `python main.py` picks up changes).
 num_agents = 500
 
 # Fraction of agents that start vaccinated (deterministic assignment inside Simulation)

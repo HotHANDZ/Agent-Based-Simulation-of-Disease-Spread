@@ -1,3 +1,12 @@
+"""
+Agent-based SIR-style disease simulation on a 2D rectangle.
+
+Significant pieces:
+- Agents move; pairwise proximity drives transmission (see Simulation.step).
+- Vaccination is a static trait at birth; efficacy scales per-contact infection risk.
+- Optional "bedridden" policy sends infected agents home until recovery (Agent.move).
+- run() writes CSV + JSON under outputs/ for reproducibility; plot() saves run_plot.png there.
+"""
 import random
 import csv
 import os
@@ -7,7 +16,12 @@ import time
 from agent import Agent
 
 class Simulation:
-    
+    """
+    Holds the world (width x height), all Agent instances, and the DiseaseModel parameters.
+
+    Each timestep: move all agents, apply infection by proximity, advance recovery timers,
+    then append S/I/R counts for plotting and logging.
+    """
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
     def __init__(self, num_agents, width, height, disease, vaccination_fraction=0.2, bedridden=False):
         
@@ -85,29 +99,25 @@ class Simulation:
             add_agent(0, y)
 
 
-        #Set a single agent to be infected
+        # Patient zero: first agent in creation order (north→south→east→west home assignment).
+        # They receive the same bedridden policy as everyone else when they become infected.
         self.agents[0].infect(bedridden=self.bedridden)
 
-
-
-        #DEUBG/ INFO GATHERING -------------------------------
+        # One list entry per simulated timestep (filled in record_data after each step).
         self.susceptible_counts = []
         self.infected_counts = []
         self.recovered_counts = []
-        #-----------------------------------------------------
-
-
 
     def step(self):
-        # Move agents
+        # 1) Movement (home ↔ random interior destination, or straight home if bedridden-infected).
         for agent in self.agents:
             agent.move(self.width, self.height)
 
+        # 2) Transmission: for every infected–susceptible pair within infection_radius,
+        # roll once per timestep against (possibly vaccination-adjusted) transmission probability.
+        # NOTE: nested loops over all agents → O(N²) per step when many are infected; fine for small N.
+        infection_radius = 3  # must match distance check below (simulation units, same as Agent coordinates)
 
-        #MAIN MODEL FOR SIMULATION
-        #Enclosed in the lines is the heart of the SIR model -----------------------------------------------------------
-
-        #Infect an agent logic
         for agent in self.agents:
             
             #Check if the current agent is considered infected
@@ -117,9 +127,8 @@ class Simulation:
                 for other in self.agents:
                     if other.state == "Susceptible":
                         
-                        #If the agent is susceptible, verify the distance between the infected and susceptible agent is less than 2
-                        if agent.distance(other) < 3:
-                            # Vaccinated agents have reduced infection risk.
+                        if agent.distance(other) < infection_radius:
+                            # Vaccination: susceptibles who are vaccinated take scaled risk (DiseaseModel.vaccination_efficacy).
                             effective_prob = self.disease.transmission_probability
                             if other.vaccinated:
                                 efficacy = getattr(self.disease, "vaccination_efficacy", 0.0)
@@ -131,9 +140,7 @@ class Simulation:
                                 other.infect(bedridden=self.bedridden)
 
 
-        #Logic for agent recovery
-        
-        #Check every agent in the agent array
+        # 3) Recovery: infected agents count up timesteps until recovery_time, then become Recovered.
         for agent in self.agents:
             
             #Check if agent is considered infected, and if so, increment agent time by 1
@@ -145,17 +152,9 @@ class Simulation:
                     agent.recover()
 
 
-        #----------------------------------------------------------------------------------------------------------------
-
-        #DEBUG / COLLECT STATS
         self.record_data()
-
-        #Increment time by 1
         self.time += 1
 
-
-
-    #Define a function for number of agents of each type 
     def record_data(self):
         
         #Get the sum of every agent of type Susceptible, Infected and Recovered
@@ -168,7 +167,6 @@ class Simulation:
         self.infected_counts.append(i)
         self.recovered_counts.append(r)
         
-    #Itterate through "time" as per the number defined by "time steps" in Main
     def _format_param_for_filename(self, value):
         if isinstance(value, float):
             # Avoid dots in filenames while keeping values readable.
@@ -178,6 +176,7 @@ class Simulation:
         return str(value)
 
     def _build_default_run_paths(self, steps):
+        # Human-readable run folder name encodes key parameters (for organization / batch runs).
         real_start = datetime.now()
         run_stamp = real_start.strftime("%Y%m%dT%H%M%S")
 
@@ -315,12 +314,11 @@ class Simulation:
 
     def run(self, steps, log_interval=1000, output_csv_path=None, output_metadata_path=None):
         """
-        Run the simulation and collect metrics every `log_interval` timesteps.
+        Run for `steps` timesteps.
 
-        By default this writes:
-        - a CSV time-series dataset
-        - a JSON metadata file
-        into a systematically named run folder under `outputs/`.
+        S/I/R lists get one sample every step (for plot()). The CSV rows are subsampled:
+        only every log_interval-th timestep (plus whatever you configure) via _collect_run_metrics.
+        Writes *_timeseries.csv and *_metadata.json under outputs/<run_label>/.
         """
         run_label, run_dir, default_csv_path, default_metadata_path, real_start = self._build_default_run_paths(steps)
         if output_csv_path is None:
@@ -328,6 +326,7 @@ class Simulation:
         if output_metadata_path is None:
             output_metadata_path = default_metadata_path
 
+        # Console sanity check: confirms Python picked up the same numbers as your saved main.py.
         print(f"[run] num_agents={self.num_agents}, steps={steps}, log_interval={log_interval}")
 
         # Track total runtime and set real-time start stamp.
@@ -339,7 +338,6 @@ class Simulation:
         for t in range(steps):
             self.step()
 
-            # Record metrics at every 1000 timesteps (and any other interval requested)
             if log_interval and (self.time % log_interval == 0):
                 run_rows.append(self._collect_run_metrics())
 
@@ -364,10 +362,9 @@ class Simulation:
         self.last_run_log_path = output_csv_path
         self.last_run_metadata_path = output_metadata_path
 
-    # Plot points on a 2D chart and save into the latest run folder.
     def plot(self):
+        """SIR line chart; saves run_plot.png next to the last CSV. plt.show() blocks until the window closes."""
         import matplotlib.pyplot as plt
-        # Diagnostic: confirm the plotted values match the run settings.
         print(
             f"[plot] num_agents={self.num_agents}, time_points={len(self.susceptible_counts)}"
         )
@@ -395,7 +392,7 @@ class Simulation:
         ax.legend()
         fig.tight_layout()
 
-        # Save into the same run folder by default.
+        # Same directory as last run()'s timeseries CSV (set in run()).
         if hasattr(self, "last_run_log_path") and self.last_run_log_path:
             run_dir = os.path.dirname(os.path.abspath(self.last_run_log_path))
             save_png_path = os.path.join(run_dir, "run_plot.png")
