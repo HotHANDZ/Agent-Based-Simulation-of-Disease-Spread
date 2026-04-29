@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 .vscode/
+
+# Local run artifacts (CSV, metadata, plots, GIF demos)
+outputs/

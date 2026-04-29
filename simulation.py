@@ -6,6 +6,7 @@ Significant pieces:
 - Vaccination is a static trait at birth; efficacy scales per-contact infection risk.
 - Optional "bedridden" policy sends infected agents home until recovery (Agent.move).
 - run() writes CSV + JSON under outputs/ for reproducibility; plot() saves run_plot.png there.
+- run_live() opens an animated 2D scatter of agents (S/I/R colors) stepping the model in real time.
 """
 import random
 import csv
@@ -23,7 +24,17 @@ class Simulation:
     then append S/I/R counts for plotting and logging.
     """
     #Construct the simulation with variable agent amounts, variable width and height of border, and a self value
-    def __init__(self, num_agents, width, height, disease, vaccination_fraction=0.2, bedridden=False):
+    def __init__(
+        self,
+        num_agents,
+        width,
+        height,
+        disease,
+        vaccination_fraction=0.2,
+        bedridden=False,
+        movement_step_size=5.0,
+        initial_infected_count=1,
+    ):
         
         #Set the number of agents equal to input value
         self.num_agents = num_agents
@@ -40,6 +51,17 @@ class Simulation:
         
         # When True, infected agents go home and stay there until they recover.
         self.bedridden = bedridden
+
+        # Grid units moved per epidemiological timestep (see scenario.movement_step_size).
+        self.movement_step_size = float(movement_step_size)
+
+        if initial_infected_count < 0:
+            raise ValueError("initial_infected_count must be >= 0")
+        if initial_infected_count > num_agents:
+            raise ValueError(
+                f"initial_infected_count ({initial_infected_count}) cannot exceed num_agents ({num_agents})"
+            )
+        self.initial_infected_count = int(initial_infected_count)
         
         #Set initial time at 0 - used as reference for agents to recover and for data gethering
         self.time = 0
@@ -99,9 +121,10 @@ class Simulation:
             add_agent(0, y)
 
 
-        # Patient zero: first agent in creation order (north→south→east→west home assignment).
-        # They receive the same bedridden policy as everyone else when they become infected.
-        self.agents[0].infect(bedridden=self.bedridden)
+        # Initial infections: first ``initial_infected_count`` agents in creation order
+        # (north→south→east→west home assignment), same bedridden policy as later infections.
+        for i in range(self.initial_infected_count):
+            self.agents[i].infect(bedridden=self.bedridden)
 
         # One list entry per simulated timestep (filled in record_data after each step).
         self.susceptible_counts = []
@@ -111,12 +134,12 @@ class Simulation:
     def step(self):
         # 1) Movement (home ↔ random interior destination, or straight home if bedridden-infected).
         for agent in self.agents:
-            agent.move(self.width, self.height)
+            agent.move(self.width, self.height, step_size=self.movement_step_size)
 
         # 2) Transmission: for every infected–susceptible pair within infection_radius,
         # roll once per timestep against (possibly vaccination-adjusted) transmission probability.
         # NOTE: nested loops over all agents → O(N²) per step when many are infected; fine for small N.
-        infection_radius = 3  # must match distance check below (simulation units, same as Agent coordinates)
+        infection_radius = float(getattr(self.disease, "contact_radius", 3.0))
 
         for agent in self.agents:
             
@@ -212,6 +235,7 @@ class Simulation:
                 "recovery_time_timesteps": self.disease.recovery_time,
                 "vaccinated_agents_count": vaccinated,
                 "vaccinated_fraction": vaccination_fraction,
+                "initial_infected_agents_count": self.initial_infected_count,
             },
             "units": {
                 "simulation_timestep_step": "step",
@@ -226,6 +250,7 @@ class Simulation:
                 "effective_transmission_probability_fraction": "fraction",
                 "transmission_probability_reduction_fraction": "fraction",
                 "entity_count_agents": "agents",
+                "initial_infected_agents_count": "agents",
             },
         }
 
@@ -392,11 +417,137 @@ class Simulation:
         ax.legend()
         fig.tight_layout()
 
-        # Same directory as last run()'s timeseries CSV (set in run()).
-        if hasattr(self, "last_run_log_path") and self.last_run_log_path:
+        if getattr(self, "last_run_log_path", None):
             run_dir = os.path.dirname(os.path.abspath(self.last_run_log_path))
             save_png_path = os.path.join(run_dir, "run_plot.png")
-            fig.savefig(save_png_path, dpi=150)
+        else:
+            fig_dir = os.path.join("outputs", "figures")
+            os.makedirs(fig_dir, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+            save_png_path = os.path.join(fig_dir, f"sir_plot_{stamp}.png")
+        fig.savefig(save_png_path, dpi=150)
+        print(f"[plot] saved {save_png_path}")
 
         plt.show()
         return fig
+
+    def _build_live_funcanimation(self, steps, interval_ms, steps_per_frame, title_prefix):
+        """Shared setup for ``run_live`` and ``save_live_animation`` (non-interactive GIF)."""
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.animation import FuncAnimation
+
+        if steps <= 0:
+            raise ValueError("steps must be positive")
+        steps_per_frame = max(1, int(steps_per_frame))
+
+        state_to_color = {
+            "Susceptible": "#3366cc",
+            "Infected": "#e03333",
+            "Recovered": "#2d8f2d",
+        }
+
+        def colors_array():
+            return np.array([state_to_color.get(a.state, "#888888") for a in self.agents])
+
+        fig, ax = plt.subplots(figsize=(9, 9))
+        ax.set_xlim(0, self.width)
+        ax.set_ylim(0, self.height)
+        ax.set_aspect("equal")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+
+        xy = np.array([[a.x, a.y] for a in self.agents], dtype=float)
+        sc = ax.scatter(
+            xy[:, 0],
+            xy[:, 1],
+            c=colors_array(),
+            s=max(6, min(36, 8000 // max(1, self.num_agents))),
+            linewidths=0,
+            alpha=0.9,
+            zorder=5,
+        )
+        ax.set_title(f"{title_prefix}  step 0/{steps}")
+
+        n_frames = 1 + (steps + steps_per_frame - 1) // steps_per_frame
+
+        def update(frame):
+            if frame > 0:
+                for _ in range(steps_per_frame):
+                    if self.time >= steps:
+                        break
+                    self.step()
+            xy2 = np.array([[a.x, a.y] for a in self.agents], dtype=float)
+            sc.set_offsets(xy2)
+            sc.set_facecolors(colors_array())
+            s = sum(1 for a in self.agents if a.state == "Susceptible")
+            i = sum(1 for a in self.agents if a.state == "Infected")
+            r = sum(1 for a in self.agents if a.state == "Recovered")
+            ax.set_title(f"{title_prefix}  step {self.time}/{steps}  S={s}  I={i}  R={r}")
+            return (sc,)
+
+        anim = FuncAnimation(
+            fig,
+            update,
+            frames=n_frames,
+            interval=interval_ms,
+            blit=False,
+            repeat=False,
+        )
+        return fig, anim
+
+    def run_live(self, steps, interval_ms=50, steps_per_frame=1, title_prefix="Live ABM"):
+        """
+        Show agents moving on a 2D plot while the simulation runs.
+
+        Each frame advances the model by up to ``steps_per_frame`` calls to ``step()`` (after the
+        first frame, which shows the initial state at t=0). Useful for demos and qualitative
+        checks that movement and proximity-based spread look reasonable; quantitative validation
+        should still use time series, parameter sweeps, and comparisons to data/expectations.
+
+        Requires matplotlib (and numpy, already used for coordinate arrays).
+
+        Parameters
+        ----------
+        steps : int
+            Total number of timesteps to simulate (same meaning as ``run(steps)``).
+        interval_ms : int
+            Delay between animation frames in milliseconds.
+        steps_per_frame : int
+            Simulation steps per frame; increase for faster playback when N is large.
+        title_prefix : str
+            Short label for the window title line.
+        """
+        import matplotlib.pyplot as plt
+
+        fig, anim = self._build_live_funcanimation(
+            steps, interval_ms, steps_per_frame, title_prefix
+        )
+        fig.tight_layout()
+        plt.show()
+        return anim
+
+    def save_live_animation(self, path, steps, fps=12, steps_per_frame=4, title_prefix="Live ABM"):
+        """
+        Write the same 2D agent animation as ``run_live`` to a GIF file (no on-screen window).
+
+        Call this in a fresh process or before any other pyplot use if you require a non-GUI
+        backend; this method sets matplotlib to ``Agg`` before importing pyplot.
+
+        Requires Pillow (``pip install pillow``) for the GIF writer.
+        """
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, anim = self._build_live_funcanimation(
+            steps, 1000 // max(1, int(fps)), steps_per_frame, title_prefix
+        )
+        fig.tight_layout()
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        anim.save(path, writer="pillow", fps=max(1, int(fps)))
+        plt.close(fig)
+        return path
