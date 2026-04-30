@@ -1,135 +1,112 @@
 import random
 import math
 
+# SINGLE PERSON: POSITION, HOME ON BORDER, SIR STATE, COMMUTE OR QUARANTINE MOVE RULES.
 class Agent:
-    """
-    One person in the simulation.
+    """COMMUTE HOME<->INTERIOR OR STAY-HOME-WHEN-SICK IF INFECTED AND BEDRIDDEN FLAG."""
 
-    Significant features:
-    - (x, y) is current position; (home_x, home_y) is the border home used for return trips.
-    - Movement is a repeating cycle: at home → pick random interior target → go there → return home.
-    - If infected under the "bedridden" policy, movement is overridden: go to home and stay until recover().
-    - vaccinated only matters while Susceptible: Simulation scales infection probability using DiseaseModel.vaccination_efficacy.
-    """
     def __init__(self, x, y, state="Susceptible", vaccinated=False, home_x=None, home_y=None):
-        
-        #Position tracking on an X Y coordinate
+
+        # CURRENT POSITION (MAY START ANYWHERE INSIDE THE RECTANGLE).
         self.x = x
         self.y = y
 
-        # Fixed border home (assigned by Simulation); may differ from initial (x, y) when agents spawn in the interior.
+        # BORDER HOME USED FOR RETURN TRIPS AND QUARANTINE TARGET.
         self.home_x = x if home_x is None else home_x
         self.home_y = y if home_y is None else home_y
-        
-        #Tracking of current agent state
-        self.state = state  # Susceptible, Infected or Recovered
-        self.time_infected = 0 # Timeframe used to determine if current agent has had ample time to recover from infection (MAY CHANGE)
 
-        #Vaccination status (affects infection probability when this agent is susceptible)
+        # SIR STATE; time_infected TICKS UP EACH STEP WHILE INFECTED.
+        self.state = state
+        self.time_infected = 0
+
+        # STATIC TRAIT; Simulation SCALES INFECTION RISK WHEN SUSCEPTIBLE.
         self.vaccinated = vaccinated
 
-        #Each agent travels: home -> random destination -> home (repeats)
-        #Valid phases: "to_target", "to_home", "at_home"
+        # COMMUTE STATE MACHINE: at_home -> to_target -> to_home -> at_home.
         self.phase = "at_home"
 
-        #Per-trip random destination (set when leaving home)
+        # INTERIOR DESTINATION FOR CURRENT TRIP.
         self.target_x = None
         self.target_y = None
 
-        # Set True on infect(bedridden=True): infected agent heads to home and does not take normal trips until recovery.
+        # SET BY infect(bedridden=True); CLEARS ON recover().
         self._stay_home_until_recovered = False
 
     def choose_new_target(self, width, height, border_margin=1.0):
-        #Pick a random point inside the simulation area (avoid exact border points)
+        # RANDOM INTERIOR POINT; border_margin AVOIDS EXACTLY SITTING ON THE EDGE.
         self.target_x = random.uniform(border_margin, max(border_margin, width - border_margin))
         self.target_y = random.uniform(border_margin, max(border_margin, height - border_margin))
 
-
-
     def move(self, width, height, step_size=5):
-            # Branch A — quarantine / bedridden: single-minded travel toward home each timestep.
-            if self.state == "Infected" and getattr(self, "_stay_home_until_recovered", False):
-                target_x, target_y = self.home_x, self.home_y
-                vx = target_x - self.x
-                vy = target_y - self.y
-                distance_to_target = math.hypot(vx, vy)
-                if distance_to_target > 0:
-                    scale = min(step_size, distance_to_target) / distance_to_target
-                    dx, dy = vx * scale, vy * scale
-                else:
-                    dx, dy = 0, 0
-                self.x = max(0, min(width, self.x + dx))
-                self.y = max(0, min(height, self.y + dy))
-                return
-
-            # Branch B — normal commuting: at_home → to_target (interior) → to_home (border) → at_home.
-            if self.phase == "at_home":
-                self.choose_new_target(width, height)
-                self.phase = "to_target"
-
-            #Determine the current movement target
-            if self.phase == "to_target":
-                target_x, target_y = self.target_x, self.target_y
-            elif self.phase == "to_home":
-                target_x, target_y = self.home_x, self.home_y
-            else:
-                target_x, target_y = self.x, self.y
-
-            #Vector toward the target
+        # BEDRIDDEN / QUARANTINE: INFECTED AGENTS STEER TO HOME AND SKIP NORMAL COMMUTE UNTIL RECOVER().
+        if self.state == "Infected" and getattr(self, "_stay_home_until_recovered", False):
+            target_x, target_y = self.home_x, self.home_y
             vx = target_x - self.x
             vy = target_y - self.y
-
             distance_to_target = math.hypot(vx, vy)
-
             if distance_to_target > 0:
-                #Normalize the vector and move up to step_size toward the target
                 scale = min(step_size, distance_to_target) / distance_to_target
-                dx = vx * scale
-                dy = vy * scale
+                dx, dy = vx * scale, vy * scale
             else:
-                dx = 0
-                dy = 0
-
-            #Update position, clamped to the simulation bounds
+                dx, dy = 0, 0
             self.x = max(0, min(width, self.x + dx))
             self.y = max(0, min(height, self.y + dy))
+            return
 
-            #Update phase transitions based on proximity to targets
-            #Thresholds can be tuned; they are in simulation units
-            target_threshold = step_size  # close enough to the destination
-            home_threshold = step_size  # close enough to home
+        # LEAVE HOME: PICK NEW RANDOM TARGET AND SWITCH PHASE.
+        if self.phase == "at_home":
+            self.choose_new_target(width, height)
+            self.phase = "to_target"
 
-            #Check if we have reached the destination and should start going home
-            if self.phase == "to_target":
-                if math.hypot(self.x - self.target_x, self.y - self.target_y) <= target_threshold:
-                    self.phase = "to_home"
+        # AIM AT INTERIOR TARGET OR HOME DEPENDING ON PHASE.
+        if self.phase == "to_target":
+            target_x, target_y = self.target_x, self.target_y
+        elif self.phase == "to_home":
+            target_x, target_y = self.home_x, self.home_y
+        else:
+            target_x, target_y = self.x, self.y
 
-            #Check if we have returned home; if so, start a new trip next step
-            if self.phase == "to_home":
-                if math.hypot(self.x - self.home_x, self.y - self.home_y) <= home_threshold:
-                    self.phase = "at_home"
+        vx = target_x - self.x
+        vy = target_y - self.y
 
-        
-        
-        
-    #Using the Euclidean Distance Formula to calculate the current distance from current agent to another agent
+        distance_to_target = math.hypot(vx, vy)
+
+        # MOVE AT MOST step_size TOWARD TARGET ALONG UNIT VECTOR.
+        if distance_to_target > 0:
+            scale = min(step_size, distance_to_target) / distance_to_target
+            dx = vx * scale
+            dy = vy * scale
+        else:
+            dx = 0
+            dy = 0
+
+        self.x = max(0, min(width, self.x + dx))
+        self.y = max(0, min(height, self.y + dy))
+
+        # ARRIVAL USES step_size AS PROXIMITY THRESHOLD (GRID UNITS).
+        target_threshold = step_size
+        home_threshold = step_size
+
+        if self.phase == "to_target":
+            if math.hypot(self.x - self.target_x, self.y - self.target_y) <= target_threshold:
+                self.phase = "to_home"
+
+        if self.phase == "to_home":
+            if math.hypot(self.x - self.home_x, self.y - self.home_y) <= home_threshold:
+                self.phase = "at_home"
+
     def distance(self, other_agent):
+        # EUCLIDEAN DISTANCE FOR CONTACT CHECKS IN Simulation.step.
         return math.sqrt((self.x - other_agent.x) ** 2 + (self.y - other_agent.y) ** 2)
 
-    
-    
-    
-    #Simple implementation of getting "infected" by checking the current state of the agent and verifying it is "Susceptible" before infecting
     def infect(self, bedridden=False):
-        #Sets the state to infected if current state is susceptible and sets the time to 0
+        # ONLY SUSCEPTIBLE -> INFECTED; RESET TIMER; OPTIONAL STAY-HOME BEHAVIOR.
         if self.state == "Susceptible":
             self.state = "Infected"
-            self.time_infected = 0  # Value will increment up as time goes on until specified value for recovery
-            self._stay_home_until_recovered = bedridden  # If True, agent goes home and stays until recovered
+            self.time_infected = 0
+            self._stay_home_until_recovered = bedridden
 
-
-
-    #Once the time hits the necessary recovered limit, change the value from "Infected" to "Recovered"
     def recover(self):
+        # CLEARS QUARANTINE FLAG SO NORMAL MOVEMENT RESUMES NEXT STEP.
         self.state = "Recovered"
-        self._stay_home_until_recovered = False  # No longer bedridden; can move normally again
+        self._stay_home_until_recovered = False
