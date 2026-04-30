@@ -9,6 +9,7 @@ class DiseaseModel:
         vaccine_transmission_risk_reduction_fraction=0.5,
         contact_radius=3.0,
     ):
+        # BASE PER-CONTACT INFECTION PROBABILITY FOR A SUSCEPTIBLE (VACCINE SCALES THIS IN Simulation.step).
         self.transmission_probability = transmission_probability
         # INFECTED STEPS BEFORE AUTOMATIC RECOVER().
         self.recovery_time = recovery_time

@@ -49,6 +49,7 @@ class Agent:
                 dx, dy = vx * scale, vy * scale
             else:
                 dx, dy = 0, 0
+            # CLAMP TO WORLD RECTANGLE SO AGENTS NEVER LEAVE [0,width]×[0,height].
             self.x = max(0, min(width, self.x + dx))
             self.y = max(0, min(height, self.y + dy))
             return
@@ -64,6 +65,7 @@ class Agent:
         elif self.phase == "to_home":
             target_x, target_y = self.home_x, self.home_y
         else:
+            # SHOULD NOT HAPPEN IF phase IS ONLY at_home | to_target | to_home; STAND STILL IF IT DOES.
             target_x, target_y = self.x, self.y
 
         vx = target_x - self.x

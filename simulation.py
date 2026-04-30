@@ -23,6 +23,7 @@ class Simulation:
         bedridden=False,
         movement_step_size=5.0,
         initial_infected_count=1,
+        hours_per_timestep=1.0,
     ):
 
         self.num_agents = num_agents
@@ -39,6 +40,9 @@ class Simulation:
 
         # GRID UNITS PER EPIDEMIOLOGICAL STEP (SEE scenario.movement_step_size).
         self.movement_step_size = float(movement_step_size)
+
+        # REAL-TIME LENGTH OF ONE EPIDEMIOLOGICAL STEP (FOR PLOTS / REPORTING); SEE scenario.hours_per_timestep.
+        self.hours_per_timestep = float(hours_per_timestep)
 
         if initial_infected_count < 0:
             raise ValueError("initial_infected_count must be >= 0")
@@ -68,6 +72,7 @@ class Simulation:
 
         def add_agent(home_x, home_y):
             nonlocal idx
+            # LOW INDEX AGENTS ARE VACCINATED; SAME INDEX RANGE LATER GETS infect() FOR INITIAL OUTBREAK SEEDS.
             vaccinated = idx < vaccinated_count
             spawn_x = random.uniform(0, width)
             spawn_y = random.uniform(0, height)
@@ -91,15 +96,17 @@ class Simulation:
             y = ((i + 1) / (west_count + 1)) * height
             add_agent(0, y)
 
+        # FIRST initial_infected_count AGENTS (BY LIST ORDER) START INFECTED — OVERLAPS VAX INDICES IF BOTH ARE LARGE.
         for i in range(self.initial_infected_count):
             self.agents[i].infect(bedridden=self.bedridden)
 
-        # ONE ENTRY PER COMPLETED step() AFTER record_data().
+        # ONE ENTRY PER COMPLETED step() AFTER record_data() — LENGTH EQUALS self.time AFTER RUN.
         self.susceptible_counts = []
         self.infected_counts = []
         self.recovered_counts = []
 
     def step(self):
+        # ORDER MATTERS: MOVE -> TRANSMIT -> RECOVER -> record_data -> self.time += 1.
         # 1) MOVEMENT (INCLUDING QUARANTINE BRANCH INSIDE Agent.move).
         for agent in self.agents:
             agent.move(self.width, self.height, step_size=self.movement_step_size)
@@ -139,7 +146,7 @@ class Simulation:
         self.time += 1
 
     def record_data(self):
-
+        # CALLED AT END OF EVERY step(); BUILDS PARALLEL S,I,R TIME SERIES FOR PLOTS AND write_run_artifacts.
         s = sum(1 for a in self.agents if a.state == "Susceptible")
         i = sum(1 for a in self.agents if a.state == "Infected")
         r = sum(1 for a in self.agents if a.state == "Recovered")
@@ -305,6 +312,7 @@ class Simulation:
             os.makedirs(parent, exist_ok=True)
 
         with open(path, "w", encoding="utf-8") as f:
+            # UTF-8 JSON SIDE CAR FOR REPRODUCIBILITY AND DOWNSTREAM ANALYSIS.
             json.dump(metadata, f, indent=2)
 
     def run(self, steps, log_interval=1000, output_csv_path=None, output_metadata_path=None):
@@ -322,6 +330,7 @@ class Simulation:
 
         run_rows = []
 
+        # EACH step() ADVANCES self.time AND APPENDS S,I,R; CSV ROWS ARE A SUBSAMPLE ONLY (log_interval).
         for t in range(steps):
             self.step()
 
@@ -366,6 +375,7 @@ class Simulation:
             self._build_default_run_paths(steps)
         )
         run_rows = []
+        # RECONSTRUCT THE SAME SUBSAMPLE run() WOULD HAVE LOGGED, USING STORED SERIES INDICES (0-BASED).
         for t in range(1, steps + 1):
             if log_interval and (t % log_interval == 0):
                 idx = t - 1
@@ -412,7 +422,8 @@ class Simulation:
         population_vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
 
         transmission_probability = self.disease.transmission_probability
-        recovery_time = self.disease.recovery_time
+        recovery_time_steps = self.disease.recovery_time
+        recovery_days = (recovery_time_steps * self.hours_per_timestep) / 24.0
 
         fig, ax = plt.subplots()
         ax.plot(self.susceptible_counts, label="Susceptible")
@@ -427,7 +438,7 @@ class Simulation:
             ax.set_yticks([0, self.num_agents])
 
         ax.set_title(
-            f"SIR (agents={self.num_agents}, pop_vax_frac={population_vaccinated_fraction:.3f}, tp={transmission_probability:.4f}, rt={recovery_time})"
+            f"SIR (agents={self.num_agents}, pop_vax_frac={population_vaccinated_fraction:.3f}, tp={transmission_probability:.4f}, rt={recovery_days:.4g} d)"
         )
         ax.legend()
         fig.tight_layout()
@@ -503,6 +514,7 @@ class Simulation:
             ax.set_title(f"{title_prefix}  step {self.time}/{steps}  S={s}  I={i}  R={r}")
             return (sc,)
 
+        # blit=False: SAFER WHEN SCATTER COLORS AND TITLE UPDATE EVERY FRAME.
         anim = FuncAnimation(
             fig,
             update,

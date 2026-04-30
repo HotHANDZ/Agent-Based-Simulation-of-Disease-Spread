@@ -16,10 +16,12 @@ from simulation import Simulation
 
 
 def _safe_mean(values: list[float]) -> float:
+    # EMPTY INPUT -> 0.0 SO CALLERS NEVER DIVIDE BY ZERO.
     return (sum(values) / len(values)) if values else 0.0
 
 
 def _percentile(values: list[float], q: float) -> float:
+    # LINEAR INTERPOLATION ON SORTED VALUES; q IN [0,1] FOR IQR BANDS IN SUMMARY PLOT.
     if not values:
         return 0.0
     if len(values) == 1:
@@ -67,6 +69,7 @@ def _build_variable_definitions_text() -> str:
 
 
 def _write_aggregated_csv(path: str, rows: list[dict[str, object]]) -> None:
+    # ONE FLAT TABLE: EVERY TIMESTEP × EVERY ITERATION (WIDE CSV FOR EXTERNAL TOOLS).
     if not rows:
         raise ValueError("No batch rows to write.")
     parent = os.path.dirname(os.path.abspath(path))
@@ -97,9 +100,6 @@ def _build_summary_png(
     avg_time_to_peak_day: float,
     avg_attack_rate_percent: float,
     avg_outbreak_duration_days: float,
-    major_outbreak_probability_percent: float,
-    avg_infection_burden_auc: float,
-    avg_recovery_efficiency: float,
 ) -> None:
     parent = os.path.dirname(os.path.abspath(output_path))
     if parent and not os.path.exists(parent):
@@ -108,6 +108,7 @@ def _build_summary_png(
     fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=[1.5, 1.0])
 
+    # LEFT: MEAN DAILY PREVALENCE + SHADED IQR; RIGHT: MONOSPACE KPI + scenario SNAPSHOT.
     ax_day = fig.add_subplot(gs[0, 0])
     x_days = list(range(1, len(avg_infected_by_day) + 1))
     ax_day.plot(x_days, avg_infected_by_day, color="#3366cc", linewidth=2)
@@ -140,9 +141,6 @@ def _build_summary_png(
             f"- Avg time to peak (days): {avg_time_to_peak_day:.3f}",
             f"- Avg attack rate (%): {avg_attack_rate_percent:.2f}",
             f"- Avg outbreak duration (days): {avg_outbreak_duration_days:.3f}",
-            f"- Major outbreak probability (%): {major_outbreak_probability_percent:.2f}",
-            f"- Avg infection burden AUC: {avg_infection_burden_auc:.3f}",
-            f"- Avg recovery efficiency: {avg_recovery_efficiency:.3f}",
             f"- Vaccine present: {bool(scenario.population_vaccinated_fraction > 0)}",
             f"- Bedridden rule enabled: {bool(scenario.bedridden)}",
             "",
@@ -183,8 +181,10 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
     hourly_infected_values: list[int] = []
     iteration_summaries: list[dict[str, object]] = []
 
+    # CALENDAR-LENGTH OF ONE ITERATION (FOR LABELS; ACTUAL BUCKETING USES scenario.hours_per_timestep).
     total_days_defined = (steps * scenario.hours_per_timestep) / 24.0
 
+    # EACH ITERATION: NEW RNG DRAWS IN Simulation/Agents — INDEPENDENT STOCHASTIC REALIZATIONS.
     for iteration_id in range(1, iterations + 1):
         disease = scenario.make_disease()
         sim = Simulation(
@@ -196,8 +196,10 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
             bedridden=scenario.bedridden,
             movement_step_size=scenario.movement_step_size(),
             initial_infected_count=scenario.initial_infected_count,
+            hours_per_timestep=scenario.hours_per_timestep,
         )
 
+        # NO sim.run(): WE ONLY NEED IN-MEMORY SERIES; SKIPS PER-STEP CSV/METADATA WRITES.
         for _ in range(steps):
             sim.step()
 
@@ -235,6 +237,7 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
                 }
             )
 
+        # WITHIN-DAY MEAN OF I (HOURLY STEPS MAPPED TO simulation_day) FOR THIS ITERATION ONLY.
         max_day = max(day_buckets.keys()) if day_buckets else 0
         daily_avg_for_iteration = []
         for day in range(1, max_day + 1):
@@ -252,9 +255,6 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
         )
         non_zero_steps = sum(1 for v in infected_series if v > 0)
         outbreak_duration_days = (non_zero_steps * scenario.hours_per_timestep) / 24.0
-        infection_burden_auc = sum(float(v) * scenario.hours_per_timestep for v in infected_series)
-        final_infections = float(scenario.num_agents - susceptible_series[-1])
-        recovery_efficiency = (recovered_series[-1] / final_infections) if final_infections > 0 else 0.0
 
         iteration_summaries.append(
             {
@@ -265,19 +265,19 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
                 "total_recovered": recovered_series[-1],
                 "attack_rate_percent": round(attack_rate_percent, 6),
                 "outbreak_duration_days": round(outbreak_duration_days, 6),
-                "infection_burden_auc": round(infection_burden_auc, 6),
-                "recovery_efficiency": round(recovery_efficiency, 6),
             }
         )
 
         print(f"[batch] finished iteration {iteration_id}/{iterations}")
 
+    # ALIGN ALL RUNS BY TIMESTEP INDEX (ASSUMES EACH ITERATION RAN EXACTLY `steps` STEPS).
     max_steps = max(len(series) for series in infected_by_timestep)
     avg_infected_by_hour: list[float] = []
     for idx in range(max_steps):
         step_values = [series[idx] for series in infected_by_timestep if idx < len(series)]
         avg_infected_by_hour.append(_safe_mean(step_values))
 
+    # CROSS-ITERATION STATS PER CALENDAR DAY (SERIES MAY DIFFER IN LENGTH IF max_day VARIED — GUARD WITH day_idx).
     max_days = max((len(series) for series in daily_infected_series_per_iter), default=0)
     avg_infected_by_day: list[float] = []
     p25_infected_by_day: list[float] = []
@@ -298,8 +298,6 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
     time_to_peak_values = [float(row["time_to_peak_day"]) for row in iteration_summaries]
     attack_rate_values = [float(row["attack_rate_percent"]) for row in iteration_summaries]
     duration_values = [float(row["outbreak_duration_days"]) for row in iteration_summaries]
-    auc_values = [float(row["infection_burden_auc"]) for row in iteration_summaries]
-    recovery_eff_values = [float(row["recovery_efficiency"]) for row in iteration_summaries]
 
     avg_peak_infected = _safe_mean(peak_values)
     p25_peak_infected = _percentile(peak_values, 0.25)
@@ -307,11 +305,6 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
     avg_time_to_peak_day = _safe_mean(time_to_peak_values)
     avg_attack_rate_percent = _safe_mean(attack_rate_values)
     avg_outbreak_duration_days = _safe_mean(duration_values)
-    avg_infection_burden_auc = _safe_mean(auc_values)
-    avg_recovery_efficiency = _safe_mean(recovery_eff_values)
-    major_outbreak_threshold_percent = 20.0
-    major_outbreak_count = sum(1 for v in attack_rate_values if v >= major_outbreak_threshold_percent)
-    major_outbreak_probability_percent = (major_outbreak_count / iterations) * 100.0
 
     aggregated_csv_path = os.path.join(batch_dir, "batch_results.csv")
     per_iteration_summary_csv_path = os.path.join(batch_dir, "batch_iteration_summary.csv")
@@ -337,10 +330,6 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
             "avg_time_to_peak_day": avg_time_to_peak_day,
             "avg_attack_rate_percent": avg_attack_rate_percent,
             "avg_outbreak_duration_days": avg_outbreak_duration_days,
-            "major_outbreak_threshold_percent": major_outbreak_threshold_percent,
-            "major_outbreak_probability_percent": major_outbreak_probability_percent,
-            "avg_infection_burden_auc": avg_infection_burden_auc,
-            "avg_recovery_efficiency": avg_recovery_efficiency,
             "vaccine_present": bool(scenario.population_vaccinated_fraction > 0),
             "bedridden_rule_enabled": bool(scenario.bedridden),
         },
@@ -362,9 +351,6 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
         avg_time_to_peak_day=avg_time_to_peak_day,
         avg_attack_rate_percent=avg_attack_rate_percent,
         avg_outbreak_duration_days=avg_outbreak_duration_days,
-        major_outbreak_probability_percent=major_outbreak_probability_percent,
-        avg_infection_burden_auc=avg_infection_burden_auc,
-        avg_recovery_efficiency=avg_recovery_efficiency,
     )
 
     print(f"[batch] wrote all iterations to: {aggregated_csv_path}")
@@ -375,6 +361,7 @@ def run_batch(iterations: int, steps: int, output_dir: str) -> tuple[str, str]:
 
 
 def main() -> None:
+    # CLI OVERRIDES scenario.timesteps FOR --steps WHEN PASSED (DEFAULT STILL scenario.timesteps).
     parser = argparse.ArgumentParser(description="Run many scenario iterations and summarize outputs.")
     parser.add_argument(
         "--iterations",

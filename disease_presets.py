@@ -58,6 +58,7 @@ def recovery_timesteps_from_infectious_days(
 
 
 def build_disease(preset: str, hours_per_timestep: float) -> DiseaseModel:
+    # NORMALIZE USER STRING: ALIAS (E.G. "covid") -> CANONICAL KEY BEFORE _PRESETS LOOKUP.
     key = _ALIASES.get(preset.strip().lower(), preset.strip().lower())
     if key not in _PRESETS:
         raise ValueError(

@@ -32,6 +32,7 @@ transmission_prob = .4
 vaccine_transmission_risk_reduction_fraction = 0.5
 contact_radius = 3
 
+
 # MATPLOTLIB ANIMATION ONLY (DOES NOT CHANGE EPIDEMIOLOGY).
 live_interval_ms = 40
 live_steps_per_frame = 4
@@ -59,6 +60,7 @@ def _preset_name_or_none():
 
 def make_disease() -> DiseaseModel:
     preset = _preset_name_or_none()
+    # PRESET PATH: TABLE IN disease_presets; ELSE MANUAL FIELDS BELOW + recovery_time FROM DAYS×HOURS_PER_STEP.
     if preset:
         return build_disease(preset, hours_per_timestep=hours_per_timestep)
     recovery_time = recovery_timesteps_from_infectious_days(

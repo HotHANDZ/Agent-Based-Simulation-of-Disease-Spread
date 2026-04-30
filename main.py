@@ -7,6 +7,7 @@ import scenario
 
 
 def main() -> None:
+    
     # PARSE --NO-LIVE FOR HEADLESS RUN (CSV/JSON WRITTEN INSIDE run()).
     parser = argparse.ArgumentParser(description="Agent-based disease simulation (see scenario.py).")
     parser.add_argument(
@@ -14,10 +15,14 @@ def main() -> None:
         action="store_true",
         help="Skip the 2D animation; run the model with run() and save outputs/ then plot.",
     )
+    
     args = parser.parse_args()
+
+
 
     # BUILD DISEASE FROM PRESET OR MANUAL FIELDS IN SCENARIO.
     disease = scenario.make_disease()
+    # SIM HOLDS AGENTS + DiseaseModel; SEEDING AND SIR ARRAYS HAPPEN IN __init__.
     sim = Simulation(
         scenario.num_agents,
         scenario.width,
@@ -27,7 +32,10 @@ def main() -> None:
         bedridden=scenario.bedridden,
         movement_step_size=scenario.movement_step_size(),
         initial_infected_count=scenario.initial_infected_count,
+        hours_per_timestep=scenario.hours_per_timestep,
     )
+
+
 
     # SUBSAMPLE INTERVAL FOR CSV ROWS (CAPPED SO FILES STAY REASONABLE).
     _log = max(1, min(1000, scenario.timesteps // 50))
@@ -44,8 +52,10 @@ def main() -> None:
         # RUN_LIVE DOES NOT WRITE CSV/JSON; DUMP ARTIFACTS AFTER THE WINDOW CLOSES.
         sim.write_run_artifacts(scenario.timesteps, log_interval=_log)
 
+    # PLOT READS susceptible_counts / infected_counts / recovered_counts IN MEMORY; MAY SAVE PNG NEXT TO LAST CSV.
     sim.plot()
 
 
 if __name__ == "__main__":
+    # python main.py  OR  python main.py --no-live
     main()
