@@ -23,7 +23,7 @@ def main() -> None:
         scenario.width,
         scenario.height,
         disease,
-        vaccination_fraction=scenario.vaccination_fraction,
+        population_vaccinated_fraction=scenario.population_vaccinated_fraction,
         bedridden=scenario.bedridden,
         movement_step_size=scenario.movement_step_size(),
         initial_infected_count=scenario.initial_infected_count,

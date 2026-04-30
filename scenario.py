@@ -7,7 +7,8 @@ from disease_presets import build_disease, recovery_timesteps_from_infectious_da
 # POPULATION AND SPACE (ABSTRACT GRID UNITS).
 num_agents = 500
 initial_infected_count = 5
-vaccination_fraction = 0
+# FRACTION OF ALL AGENTS (0.0 THROUGH 1.0) THAT START THE RUN AS VACCINATED — NOT A 0–100 "PERCENT" INTEGER (USE 0.25 FOR 25%).
+population_vaccinated_fraction = 0
 bedridden = True
 width = 500
 height = 500
@@ -27,7 +28,8 @@ disease_preset = None
 # MANUAL DISEASE WHEN disease_preset IS NONE (recovery_time DERIVED FROM infectious_period_days).
 infectious_period_days = 10.0
 transmission_prob = .4
-vaccination_efficacy = 0.5
+# WHEN A VACCINATED AGENT IS STILL SUSCEPTIBLE, PER-CONTACT INFECTION USES BASE PROBABILITY × (1 − THIS). 0 = VACCINE DOES NOTHING; 1 = BLOCKS TRANSMISSION IN THIS SIMPLE MODEL.
+vaccine_transmission_risk_reduction_fraction = 0.5
 contact_radius = 3
 
 # MATPLOTLIB ANIMATION ONLY (DOES NOT CHANGE EPIDEMIOLOGY).
@@ -65,6 +67,6 @@ def make_disease() -> DiseaseModel:
     return DiseaseModel(
         transmission_prob,
         recovery_time,
-        vaccination_efficacy=vaccination_efficacy,
+        vaccine_transmission_risk_reduction_fraction=vaccine_transmission_risk_reduction_fraction,
         contact_radius=contact_radius,
     )

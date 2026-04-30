@@ -12,7 +12,7 @@ _PRESETS: dict[str, dict] = {
         "infectious_period_days": 5.5,
         "transmission_probability": 0.18,
         "contact_radius": 3.0,
-        "vaccination_efficacy": 0.5,
+        "vaccine_transmission_risk_reduction_fraction": 0.5,
     },
     "covid19": {
         "label": "SARS-CoV-2–style (simplified: longer window, much higher per-contact spread + wider reach vs flu in this toy grid)",
@@ -20,14 +20,14 @@ _PRESETS: dict[str, dict] = {
         # COVID PRESET: HIGHER P AND RADIUS THAN FLU SO OUTBREAKS DOMINATE FLU IN THIS TOY MODEL.
         "transmission_probability": 0.4,
         "contact_radius": 6.0,
-        "vaccination_efficacy": 0.55,
+        "vaccine_transmission_risk_reduction_fraction": 0.55,
     },
     "strep": {
         "label": "Group A strep pharyngitis analogy (bacterial; no vaccine in preset; shorter window, closer contact)",
         "infectious_period_days": 4.0,
         "transmission_probability": 0.01,
         "contact_radius": 2.5,
-        "vaccination_efficacy": 0.0,
+        "vaccine_transmission_risk_reduction_fraction": 0.0,
     },
 }
 
@@ -74,7 +74,7 @@ def build_disease(preset: str, hours_per_timestep: float) -> DiseaseModel:
     return DiseaseModel(
         p["transmission_probability"],
         recovery_timesteps,
-        vaccination_efficacy=p["vaccination_efficacy"],
+        vaccine_transmission_risk_reduction_fraction=p["vaccine_transmission_risk_reduction_fraction"],
         contact_radius=p["contact_radius"],
     )
 

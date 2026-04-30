@@ -18,7 +18,8 @@ class Simulation:
         width,
         height,
         disease,
-        vaccination_fraction=0.2,
+        # FRACTION OF AGENTS (0.0–1.0) THAT START AS VACCINATED — SEE scenario.population_vaccinated_fraction.
+        population_vaccinated_fraction=0.2,
         bedridden=False,
         movement_step_size=5.0,
         initial_infected_count=1,
@@ -51,8 +52,8 @@ class Simulation:
         self.time = 0
         self.run_started_at = None
 
-        # HOMES ON NORTH/SOUTH/EAST/WEST IN THAT ORDER; FIRST initial_infected_count AGENTS ARE SEEDED INFECTED IN THAT SAME ORDER.
-        vaccinated_count = int(num_agents * vaccination_fraction)
+        # HOMES ON NORTH/SOUTH/EAST/WEST; FIRST initial_infected_count AGENTS SEEDED INFECTED; FIRST vaccinated_count AGENTS VACCINATED (population_vaccinated_fraction IS 0.0–1.0, NOT 0–100).
+        vaccinated_count = int(num_agents * population_vaccinated_fraction)
 
         # SPLIT POPULATION ACROSS FOUR EDGES; REMAINDER GOES N,S,E,W IN THAT ORDER.
         base = num_agents // 4
@@ -67,7 +68,6 @@ class Simulation:
 
         def add_agent(home_x, home_y):
             nonlocal idx
-            # FIRST vaccinated_count AGENTS (CREATION ORDER) ARE VACCINATED.
             vaccinated = idx < vaccinated_count
             spawn_x = random.uniform(0, width)
             spawn_y = random.uniform(0, height)
@@ -117,8 +117,10 @@ class Simulation:
                         if agent.distance(other) < infection_radius:
                             effective_prob = self.disease.transmission_probability
                             if other.vaccinated:
-                                efficacy = getattr(self.disease, "vaccination_efficacy", 0.0)
-                                risk_multiplier = max(0.0, min(1.0, 1.0 - efficacy))
+                                reduction = getattr(
+                                    self.disease, "vaccine_transmission_risk_reduction_fraction", 0.0
+                                )
+                                risk_multiplier = max(0.0, min(1.0, 1.0 - reduction))
                                 effective_prob = effective_prob * risk_multiplier
 
                             if random.random() < effective_prob:
@@ -177,7 +179,7 @@ class Simulation:
     def _collect_static_run_metadata(self, steps, log_interval, real_start):
         # FIXED FIELDS FOR JSON SIDEcar (UNITS DICT FOR REPORTING CLARITY).
         vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
-        vaccination_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
+        population_vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
         return {
             "dataset_schema_version": "1.0",
             "run_real_start_time_iso8601": real_start.isoformat(timespec="seconds"),
@@ -191,7 +193,7 @@ class Simulation:
                 "transmission_probability_fraction": self.disease.transmission_probability,
                 "recovery_time_timesteps": self.disease.recovery_time,
                 "vaccinated_agents_count": vaccinated,
-                "vaccinated_fraction": vaccination_fraction,
+                "population_vaccinated_fraction": population_vaccinated_fraction,
                 "initial_infected_agents_count": self.initial_infected_count,
             },
             "units": {
@@ -202,8 +204,8 @@ class Simulation:
                 "recovered_agents_count": "agents",
                 "vaccinated_agents_count": "agents",
                 "transmission_probability_fraction": "fraction",
-                "vaccination_efficacy_fraction": "fraction",
-                "vaccinated_fraction": "fraction",
+                "vaccine_transmission_risk_reduction_fraction": "fraction",
+                "population_vaccinated_fraction": "fraction",
                 "effective_transmission_probability_fraction": "fraction",
                 "transmission_probability_reduction_fraction": "fraction",
                 "entity_count_agents": "agents",
@@ -229,12 +231,16 @@ class Simulation:
         t_step = self.time if timestep is None else int(timestep)
         vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
 
-        vaccination_efficacy = getattr(self.disease, "vaccination_efficacy", 0.0)
-        vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
+        vaccine_transmission_risk_reduction_fraction = getattr(
+            self.disease, "vaccine_transmission_risk_reduction_fraction", 0.0
+        )
+        population_vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
 
-        # POPULATION-WEIGHTED EFFECTIVE P: BASE * (1 - v*e) WITH v = FRACTION VAX, e = EFFICACY.
+        # POPULATION-WEIGHTED EFFECTIVE P: BASE * (1 - v*r) WITH v = FRACTION VAX, r = RISK REDUCTION PER VACCINATED CONTACT.
         base_transmission_probability = self.disease.transmission_probability
-        effective_transmission_probability = base_transmission_probability * (1.0 - vaccinated_fraction * vaccination_efficacy)
+        effective_transmission_probability = base_transmission_probability * (
+            1.0 - population_vaccinated_fraction * vaccine_transmission_risk_reduction_fraction
+        )
         effective_transmission_probability = max(0.0, min(base_transmission_probability, effective_transmission_probability))
         transmission_probability_reduction = base_transmission_probability - effective_transmission_probability
 
@@ -255,8 +261,8 @@ class Simulation:
             "recovered_agents_count": recovered,
             "vaccinated_agents_count": vaccinated,
             "transmission_probability_fraction": base_transmission_probability,
-            "vaccination_efficacy_fraction": vaccination_efficacy,
-            "vaccinated_fraction": vaccinated_fraction,
+            "vaccine_transmission_risk_reduction_fraction": vaccine_transmission_risk_reduction_fraction,
+            "population_vaccinated_fraction": population_vaccinated_fraction,
             "effective_transmission_probability_fraction": effective_transmission_probability,
             "transmission_probability_reduction_fraction": transmission_probability_reduction,
             "entity_count_agents": self.num_agents,
@@ -274,8 +280,8 @@ class Simulation:
             "recovered_agents_count",
             "vaccinated_agents_count",
             "transmission_probability_fraction",
-            "vaccination_efficacy_fraction",
-            "vaccinated_fraction",
+            "vaccine_transmission_risk_reduction_fraction",
+            "population_vaccinated_fraction",
             "effective_transmission_probability_fraction",
             "transmission_probability_reduction_fraction",
             "entity_count_agents",
@@ -403,7 +409,7 @@ class Simulation:
         )
 
         vaccinated = sum(1 for a in self.agents if getattr(a, "vaccinated", False))
-        vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
+        population_vaccinated_fraction = (vaccinated / self.num_agents) if self.num_agents else 0.0
 
         transmission_probability = self.disease.transmission_probability
         recovery_time = self.disease.recovery_time
@@ -421,7 +427,7 @@ class Simulation:
             ax.set_yticks([0, self.num_agents])
 
         ax.set_title(
-            f"SIR (agents={self.num_agents}, vacc_frac={vaccinated_fraction:.3f}, tp={transmission_probability:.4f}, rt={recovery_time})"
+            f"SIR (agents={self.num_agents}, pop_vax_frac={population_vaccinated_fraction:.3f}, tp={transmission_probability:.4f}, rt={recovery_time})"
         )
         ax.legend()
         fig.tight_layout()
