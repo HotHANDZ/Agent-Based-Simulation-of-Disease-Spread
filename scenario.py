@@ -15,14 +15,14 @@ height = 500
 timesteps = 700
 
 # CLOCK: ONE SIM STEP = hours_per_timestep REAL HOURS.
-hours_per_timestep = 1.0
 # SPEED IN GRID UNITS PER SIMULATED HOUR (USED ONLY IF movement_distance_per_step IS None BELOW).
+hours_per_timestep = 1.0
 movement_units_per_hour = 5.0
 # GRID UNITS EACH AGENT MOVES PER SIMULATION STEP TOWARD ITS TARGET. SET A NUMBER HERE TO USE IT DIRECTLY.
 # IF None, USE movement_units_per_hour * hours_per_timestep INSTEAD.
 movement_distance_per_step = None
 
-# SET TO A PRESET NAME (E.G. "flu") OR NONE TO USE MANUAL BLOCK BELOW.
+# UNFINISHED PRESET MODEL USED TO SAVE PRIOR CONFIGURATIONS
 disease_preset = None
 
 # MANUAL DISEASE WHEN disease_preset IS NONE (recovery_time DERIVED FROM infectious_period_days).
